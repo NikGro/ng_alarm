@@ -170,4 +170,11 @@ class HAPanelNGAlarm extends HTMLElement {
   }
 }
 
-customElements.define("ha-panel-ng-alarm", HAPanelNGAlarm);
+if (!customElements.get("ha-panel-ng-alarm")) {
+  customElements.define("ha-panel-ng-alarm", HAPanelNGAlarm);
+}
+
+// Compatibility alias for older panel registration variants.
+if (!customElements.get("ng-alarm-panel")) {
+  customElements.define("ng-alarm-panel", HAPanelNGAlarm);
+}

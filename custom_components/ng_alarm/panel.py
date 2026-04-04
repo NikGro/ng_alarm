@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -104,7 +105,7 @@ async def async_setup_panel(hass) -> None:
     hass.http.register_view(NGAlarmConfigView)
     hass.http.register_view(NGAlarmReloadView)
 
-    module_url = f"{PANEL_STATIC_URL}/{PANEL_JS_FILE}"
+    module_url = f"{PANEL_STATIC_URL}/{PANEL_JS_FILE}?v={int(time.time())}"
 
     try:
         # Modern HA approach: register module url + built-in panel entry.
