@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from aiohttp import web
+from homeassistant.components.frontend import (
+    add_extra_js_url,
+    async_register_built_in_panel,
+)
 from homeassistant.components.http import HomeAssistantView
 
 from .const import (
@@ -104,20 +108,40 @@ async def async_setup_panel(hass) -> None:
     module_url = f"{PANEL_STATIC_URL}/{PANEL_JS_FILE}"
 
     try:
-        # Register via panel_custom service to get a native sidebar page.
-        await hass.services.async_call(
-            "panel_custom",
-            "register",
-            {
-                "frontend_url_path": PANEL_URL_PATH,
-                "webcomponent_name": PANEL_COMPONENT_NAME,
-                "module_url": module_url,
-                "sidebar_title": "Alarm",
-                "sidebar_icon": "mdi:shield-home",
-                "require_admin": True,
-                "config": {"domain": DOMAIN},
-            },
-            blocking=True,
+        # Modern HA approach: register module url + built-in panel entry.
+        add_extra_js_url(hass, module_url)
+        async_register_built_in_panel(
+            hass,
+            PANEL_COMPONENT_NAME,
+            sidebar_title="Alarm",
+            sidebar_icon="mdi:shield-home",
+            frontend_url_path=PANEL_URL_PATH,
+            config={"domain": DOMAIN},
+            require_admin=True,
+            update=True,
         )
     except Exception as err:  # noqa: BLE001
-        _LOGGER.warning("Could not register NG Alarm panel: %s", err)
+        _LOGGER.warning("Could not register NG Alarm panel via frontend API: %s", err)
+
+        # Fallback for older setups where panel_custom register service still exists.
+        if hass.services.has_service("panel_custom", "register"):
+            try:
+                await hass.services.async_call(
+                    "panel_custom",
+                    "register",
+                    {
+                        "frontend_url_path": PANEL_URL_PATH,
+                        "webcomponent_name": PANEL_COMPONENT_NAME,
+                        "module_url": module_url,
+                        "sidebar_title": "Alarm",
+                        "sidebar_icon": "mdi:shield-home",
+                        "require_admin": True,
+                        "config": {"domain": DOMAIN},
+                    },
+                    blocking=True,
+                )
+            except Exception as fallback_err:  # noqa: BLE001
+                _LOGGER.warning(
+                    "Could not register NG Alarm panel via panel_custom fallback: %s",
+                    fallback_err,
+                )
