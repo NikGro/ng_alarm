@@ -1,8 +1,8 @@
 {
   "name": "NG Alarm",
   "content_in_root": false,
-  "filename": "ng_alarm.zip",
   "country": ["DE"],
   "homeassistant": "2023.1.0",
-  "render_readme": true
+  "render_readme": true,
+  "iot_class": "local_push"
 }
