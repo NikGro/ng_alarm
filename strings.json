@@ -1,0 +1,63 @@
+{
+  "title": "NG Alarm",
+  "config": {
+    "step": {
+      "user": {
+        "title": "NG Alarm Setup",
+        "data": {
+          "name": "Alarm name",
+          "alarm_code": "Alarm code",
+          "panic_code": "Panic code (optional)",
+          "exit_delay_away": "Exit delay - Away (seconds)",
+          "entry_delay_away": "Entry delay - Away (seconds)",
+          "exit_delay_home": "Exit delay - Home (seconds)",
+          "entry_delay_home": "Entry delay - Home (seconds)",
+          "away_active_sensors": "Away - Active sensors",
+          "away_bypass_sensors": "Away - Bypass sensors",
+          "home_active_sensors": "Home - Active sensors",
+          "home_bypass_sensors": "Home - Bypass sensors",
+          "bypass_entities": "Bypass entities",
+          "bypass_state": "Bypass state",
+          "pending_scripts": "Pending scripts",
+          "triggered_scripts": "Triggered scripts",
+          "armed_away_scripts": "Armed Away scripts",
+          "armed_home_scripts": "Armed Home scripts",
+          "disarmed_scripts": "Disarmed scripts",
+          "panic_scripts": "Panic scripts"
+        }
+      }
+    },
+    "error": {
+      "invalid_code": "Alarm code must be provided",
+      "invalid_delay": "Delay must be a positive number"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "NG Alarm Options",
+        "data": {
+          "name": "Alarm name",
+          "alarm_code": "Alarm code",
+          "panic_code": "Panic code (optional)",
+          "exit_delay_away": "Exit delay - Away (seconds)",
+          "entry_delay_away": "Entry delay - Away (seconds)",
+          "exit_delay_home": "Exit delay - Home (seconds)",
+          "entry_delay_home": "Entry delay - Home (seconds)",
+          "away_active_sensors": "Away - Active sensors",
+          "away_bypass_sensors": "Away - Bypass sensors",
+          "home_active_sensors": "Home - Active sensors",
+          "home_bypass_sensors": "Home - Bypass sensors",
+          "bypass_entities": "Bypass entities",
+          "bypass_state": "Bypass state",
+          "pending_scripts": "Pending scripts",
+          "triggered_scripts": "Triggered scripts",
+          "armed_away_scripts": "Armed Away scripts",
+          "armed_home_scripts": "Armed Home scripts",
+          "disarmed_scripts": "Disarmed scripts",
+          "panic_scripts": "Panic scripts"
+        }
+      }
+    }
+  }
+}
