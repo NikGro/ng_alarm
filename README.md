@@ -21,15 +21,11 @@ Custom Home Assistant alarm integration with a native editable configuration pag
 
 ## Enable integration
 
-No config flow is used. Add this to `configuration.yaml`:
+1. Go to **Settings → Devices & Services → Add Integration**
+2. Add **Alarm**
+3. Open sidebar item **Alarm** to edit runtime configuration
 
-```yaml
-ng_alarm:
-```
-
-Restart Home Assistant.
-
-Then open sidebar item **NG Alarm** to edit configuration.
+No settings are configured in config flow; all editing is done in the panel page.
 
 ## API endpoints
 

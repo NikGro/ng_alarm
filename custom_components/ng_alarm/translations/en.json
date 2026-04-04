@@ -1,0 +1,14 @@
+{
+  "title": "Alarm",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Alarm",
+        "description": "Create the Alarm integration. Configure details in the Alarm sidebar page."
+      }
+    },
+    "abort": {
+      "already_configured": "Alarm is already configured."
+    }
+  }
+}

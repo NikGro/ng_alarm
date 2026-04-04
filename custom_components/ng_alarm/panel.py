@@ -96,7 +96,7 @@ async def async_setup_panel(hass) -> None:
                 "frontend_url_path": PANEL_URL_PATH,
                 "webcomponent_name": PANEL_COMPONENT_NAME,
                 "module_url": module_url,
-                "sidebar_title": "NG Alarm",
+                "sidebar_title": "Alarm",
                 "sidebar_icon": "mdi:shield-home",
                 "require_admin": True,
                 "config": {"domain": DOMAIN},
