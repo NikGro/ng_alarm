@@ -2,23 +2,15 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
     AlarmControlPanelEntityFeature,
+    AlarmControlPanelState,
     CodeFormat,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    STATE_ALARM_ARMED_AWAY,
-    STATE_ALARM_ARMED_HOME,
-    STATE_ALARM_ARMING,
-    STATE_ALARM_DISARMED,
-    STATE_ALARM_PENDING,
-    STATE_ALARM_TRIGGERED,
-)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 from homeassistant.helpers.storage import Store
@@ -53,13 +45,25 @@ from .const import (
     UNKNOWN,
 )
 
-_LOGGER = logging.getLogger(__name__)
+
+def _state_str(state: AlarmControlPanelState) -> str:
+    """Return legacy string representation for scripts."""
+    return {
+        AlarmControlPanelState.DISARMED: "disarmed",
+        AlarmControlPanelState.ARMING: "arming",
+        AlarmControlPanelState.ARMED_AWAY: "armed_away",
+        AlarmControlPanelState.ARMED_HOME: "armed_home",
+        AlarmControlPanelState.PENDING: "pending",
+        AlarmControlPanelState.TRIGGERED: "triggered",
+    }[state]
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> None:
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities
+) -> None:
     """Set up platform from config entry."""
     runtime = hass.data[DOMAIN][RUNTIME_STATE_KEY]
-    entity = NGAlarmControlPanel(hass, runtime.store, runtime.config)
+    entity = NGAlarmControlPanel(hass, runtime.config)
     runtime.entity = entity
     async_add_entities([entity])
 
@@ -73,15 +77,15 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
     _attr_code_format = CodeFormat.NUMBER
     _attr_code_arm_required = True
 
-    def __init__(self, hass: HomeAssistant, store: Store, config: dict[str, Any]) -> None:
+    def __init__(self, hass: HomeAssistant, config: dict[str, Any]) -> None:
         self.hass = hass
         self._store = Store(hass, 1, f"{STORAGE_KEY}.runtime")
         self._config = config
         self._attr_name = config.get(CONF_NAME, "NG Alarm")
         self._attr_unique_id = f"{DOMAIN}_main"
 
-        self._state = STATE_ALARM_DISARMED
-        self._armed_mode: str | None = None
+        self._alarm_state = AlarmControlPanelState.DISARMED
+        self._armed_mode: AlarmControlPanelState | None = None
         self._triggered_sensor = UNKNOWN
         self._triggered_sensor_name = UNKNOWN
 
@@ -90,17 +94,44 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._sensor_unsub = None
         self._bypass_unsub = None
 
+    @property
+    def alarm_state(self) -> AlarmControlPanelState:
+        """Return alarm state enum (required by modern HA)."""
+        return self._alarm_state
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            ATTR_TRIGGERED_SENSOR: self._triggered_sensor,
+            ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
+            ATTR_ALARM_MODE: _state_str(self._armed_mode) if self._armed_mode else UNKNOWN,
+        }
+
     async def async_added_to_hass(self) -> None:
-        """Restore state and listeners."""
         saved = await self._store.async_load()
         if saved:
-            self._state = saved.get("state", STATE_ALARM_DISARMED)
-            self._armed_mode = saved.get("armed_mode")
+            raw = saved.get("state", "disarmed")
+            self._alarm_state = {
+                "disarmed": AlarmControlPanelState.DISARMED,
+                "arming": AlarmControlPanelState.ARMING,
+                "armed_away": AlarmControlPanelState.ARMED_AWAY,
+                "armed_home": AlarmControlPanelState.ARMED_HOME,
+                "pending": AlarmControlPanelState.PENDING,
+                "triggered": AlarmControlPanelState.TRIGGERED,
+            }.get(raw, AlarmControlPanelState.DISARMED)
+            raw_mode = saved.get("armed_mode")
+            self._armed_mode = {
+                "armed_away": AlarmControlPanelState.ARMED_AWAY,
+                "armed_home": AlarmControlPanelState.ARMED_HOME,
+            }.get(raw_mode)
             self._triggered_sensor = saved.get("triggered_sensor", UNKNOWN)
             self._triggered_sensor_name = saved.get("triggered_sensor_name", UNKNOWN)
 
         await self._async_bind_bypass_listener()
-        if self._state in (STATE_ALARM_ARMED_AWAY, STATE_ALARM_ARMED_HOME):
+        if self._alarm_state in (
+            AlarmControlPanelState.ARMED_AWAY,
+            AlarmControlPanelState.ARMED_HOME,
+        ):
             self._async_refresh_sensor_listener()
 
     async def async_will_remove_from_hass(self) -> None:
@@ -108,30 +139,17 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._remove_listeners()
 
     async def async_reload_config(self, new_config: dict[str, Any]) -> None:
-        """Reload config from panel API."""
         self._config = new_config
         self._attr_name = self._config.get(CONF_NAME, "NG Alarm")
         await self._async_bind_bypass_listener()
         self._async_refresh_sensor_listener()
         self.async_write_ha_state()
 
-    @property
-    def state(self):
-        return self._state
-
-    @property
-    def extra_state_attributes(self):
-        return {
-            ATTR_TRIGGERED_SENSOR: self._triggered_sensor,
-            ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
-            ATTR_ALARM_MODE: self._armed_mode or UNKNOWN,
-        }
-
     async def _async_persist_runtime(self) -> None:
         await self._store.async_save(
             {
-                "state": self._state,
-                "armed_mode": self._armed_mode,
+                "state": _state_str(self._alarm_state),
+                "armed_mode": _state_str(self._armed_mode) if self._armed_mode else None,
                 "triggered_sensor": self._triggered_sensor,
                 "triggered_sensor_name": self._triggered_sensor_name,
             }
@@ -141,7 +159,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         variables = {
             ATTR_TRIGGERED_SENSOR: self._triggered_sensor,
             ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
-            ATTR_ALARM_MODE: self._armed_mode or UNKNOWN,
+            ATTR_ALARM_MODE: _state_str(self._armed_mode) if self._armed_mode else UNKNOWN,
             ATTR_ALARM_STATE: alarm_state,
         }
         for entity_id in self._config.get(key, []):
@@ -189,12 +207,12 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         return False
 
     def _monitored_sensors(self) -> list[str]:
-        if self._state == STATE_ALARM_ARMED_AWAY:
+        if self._alarm_state == AlarmControlPanelState.ARMED_AWAY:
             sensors = list(self._config.get(CONF_AWAY_ACTIVE_SENSORS, []))
             if not self._is_bypass_active():
                 sensors += list(self._config.get(CONF_AWAY_BYPASS_SENSORS, []))
             return sensors
-        if self._state == STATE_ALARM_ARMED_HOME:
+        if self._alarm_state == AlarmControlPanelState.ARMED_HOME:
             sensors = list(self._config.get(CONF_HOME_ACTIVE_SENSORS, []))
             if not self._is_bypass_active():
                 sensors += list(self._config.get(CONF_HOME_BYPASS_SENSORS, []))
@@ -212,11 +230,17 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             )
 
     async def _async_bypass_changed(self, _event) -> None:
-        if self._state in (STATE_ALARM_ARMED_AWAY, STATE_ALARM_ARMED_HOME):
+        if self._alarm_state in (
+            AlarmControlPanelState.ARMED_AWAY,
+            AlarmControlPanelState.ARMED_HOME,
+        ):
             self._async_refresh_sensor_listener()
 
     async def _async_sensor_changed(self, event) -> None:
-        if self._state not in (STATE_ALARM_ARMED_AWAY, STATE_ALARM_ARMED_HOME):
+        if self._alarm_state not in (
+            AlarmControlPanelState.ARMED_AWAY,
+            AlarmControlPanelState.ARMED_HOME,
+        ):
             return
 
         new_state = event.data.get("new_state")
@@ -231,13 +255,15 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 state_obj.attributes.get("friendly_name", entity_id) if state_obj else entity_id
             )
 
-        self._state = STATE_ALARM_PENDING
+        self._alarm_state = AlarmControlPanelState.PENDING
         self.async_write_ha_state()
         await self._async_persist_runtime()
         await self._async_run_scripts(CONF_PENDING_SCRIPTS, "pending")
 
         delay = self._config.get(
-            CONF_ENTRY_DELAY_AWAY if self._armed_mode == STATE_ALARM_ARMED_AWAY else CONF_ENTRY_DELAY_HOME,
+            CONF_ENTRY_DELAY_AWAY
+            if self._armed_mode == AlarmControlPanelState.ARMED_AWAY
+            else CONF_ENTRY_DELAY_HOME,
             0,
         )
         self._cancel_timers()
@@ -245,21 +271,21 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     async def _async_finish_entry_delay(self, _now):
         self._entry_unsub = None
-        self._state = STATE_ALARM_TRIGGERED
+        self._alarm_state = AlarmControlPanelState.TRIGGERED
         self.async_write_ha_state()
         await self._async_persist_runtime()
         await self._async_run_scripts(CONF_TRIGGERED_SCRIPTS, "triggered")
 
     async def _async_finish_exit_delay(self, _now):
         self._exit_unsub = None
-        self._state = self._armed_mode or STATE_ALARM_ARMED_AWAY
+        self._alarm_state = self._armed_mode or AlarmControlPanelState.ARMED_AWAY
         self.async_write_ha_state()
         await self._async_persist_runtime()
         self._async_refresh_sensor_listener()
 
-        if self._state == STATE_ALARM_ARMED_AWAY:
+        if self._alarm_state == AlarmControlPanelState.ARMED_AWAY:
             await self._async_run_scripts(CONF_ARMED_AWAY_SCRIPTS, "armed_away")
-        elif self._state == STATE_ALARM_ARMED_HOME:
+        elif self._alarm_state == AlarmControlPanelState.ARMED_HOME:
             await self._async_run_scripts(CONF_ARMED_HOME_SCRIPTS, "armed_home")
 
     def _code_ok(self, given, expected: str) -> bool:
@@ -268,20 +294,24 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
     async def async_alarm_arm_away(self, code=None) -> None:
         if not self._code_ok(code, self._config.get(CONF_ALARM_CODE, "")):
             return
-        await self._async_arm(STATE_ALARM_ARMED_AWAY, int(self._config.get(CONF_EXIT_DELAY_AWAY, 0)))
+        await self._async_arm(
+            AlarmControlPanelState.ARMED_AWAY, int(self._config.get(CONF_EXIT_DELAY_AWAY, 0))
+        )
 
     async def async_alarm_arm_home(self, code=None) -> None:
         if not self._code_ok(code, self._config.get(CONF_ALARM_CODE, "")):
             return
-        await self._async_arm(STATE_ALARM_ARMED_HOME, int(self._config.get(CONF_EXIT_DELAY_HOME, 0)))
+        await self._async_arm(
+            AlarmControlPanelState.ARMED_HOME, int(self._config.get(CONF_EXIT_DELAY_HOME, 0))
+        )
 
-    async def _async_arm(self, mode: str, delay: int) -> None:
+    async def _async_arm(self, mode: AlarmControlPanelState, delay: int) -> None:
         self._cancel_timers()
         self._triggered_sensor = UNKNOWN
         self._triggered_sensor_name = UNKNOWN
         self._armed_mode = mode
 
-        self._state = STATE_ALARM_ARMING if delay > 0 else mode
+        self._alarm_state = AlarmControlPanelState.ARMING if delay > 0 else mode
         self.async_write_ha_state()
         await self._async_persist_runtime()
 
@@ -289,7 +319,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._exit_unsub = async_call_later(self.hass, delay, self._async_finish_exit_delay)
         else:
             self._async_refresh_sensor_listener()
-            if mode == STATE_ALARM_ARMED_AWAY:
+            if mode == AlarmControlPanelState.ARMED_AWAY:
                 await self._async_run_scripts(CONF_ARMED_AWAY_SCRIPTS, "armed_away")
             else:
                 await self._async_run_scripts(CONF_ARMED_HOME_SCRIPTS, "armed_home")
@@ -306,7 +336,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._remove_listeners()
         await self._async_bind_bypass_listener()
 
-        self._state = STATE_ALARM_DISARMED
+        self._alarm_state = AlarmControlPanelState.DISARMED
         self._armed_mode = None
         self._triggered_sensor = UNKNOWN
         self._triggered_sensor_name = UNKNOWN
@@ -319,8 +349,12 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             await self._async_run_scripts(CONF_DISARMED_SCRIPTS, "disarmed")
 
     async def async_alarm_trigger(self, code=None) -> None:
-        if self._state in (STATE_ALARM_ARMED_AWAY, STATE_ALARM_ARMED_HOME, STATE_ALARM_PENDING):
-            self._state = STATE_ALARM_TRIGGERED
+        if self._alarm_state in (
+            AlarmControlPanelState.ARMED_AWAY,
+            AlarmControlPanelState.ARMED_HOME,
+            AlarmControlPanelState.PENDING,
+        ):
+            self._alarm_state = AlarmControlPanelState.TRIGGERED
             self.async_write_ha_state()
             await self._async_persist_runtime()
             await self._async_run_scripts(CONF_TRIGGERED_SCRIPTS, "triggered")
