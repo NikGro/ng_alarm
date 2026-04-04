@@ -8,8 +8,8 @@ STORAGE_VERSION = 1
 STORAGE_KEY = f"{DOMAIN}.config"
 RUNTIME_STATE_KEY = f"{DOMAIN}.runtime"
 
-PANEL_URL_PATH = "ng-alarm"
-PANEL_COMPONENT_NAME = "ng-alarm-panel"
+PANEL_URL_PATH = "alarm"
+PANEL_COMPONENT_NAME = "ng-alarm"
 PANEL_STATIC_URL = "/ng_alarm_static"
 PANEL_JS_FILE = "ng_alarm_panel.js"
 

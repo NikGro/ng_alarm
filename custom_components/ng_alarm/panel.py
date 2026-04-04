@@ -16,7 +16,6 @@ from homeassistant.components.http import HomeAssistantView
 from .const import (
     API_GET_CONFIG,
     API_RELOAD,
-    API_SET_CONFIG,
     DOMAIN,
     PANEL_COMPONENT_NAME,
     PANEL_JS_FILE,
@@ -131,7 +130,7 @@ async def async_setup_panel(hass) -> None:
                     "register",
                     {
                         "frontend_url_path": PANEL_URL_PATH,
-                        "webcomponent_name": PANEL_COMPONENT_NAME,
+                        "webcomponent_name": f"ha-panel-{PANEL_COMPONENT_NAME}",
                         "module_url": module_url,
                         "sidebar_title": "Alarm",
                         "sidebar_icon": "mdi:shield-home",
