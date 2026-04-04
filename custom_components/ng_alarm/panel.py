@@ -75,12 +75,28 @@ class NGAlarmReloadView(HomeAssistantView):
 async def async_setup_panel(hass) -> None:
     """Register static frontend assets, API views and sidebar panel."""
     frontend_dir = Path(__file__).parent / "frontend"
-    if hass.http is not None:
-        hass.http.register_static_path(
-            PANEL_STATIC_URL,
-            str(frontend_dir),
-            cache_headers=False,
-        )
+    if hass.http is None:
+        return
+
+    # HA API changed over time; support both static registration styles.
+    if hasattr(hass.http, "async_register_static_paths"):
+        try:
+            from homeassistant.components.http import StaticPathConfig
+
+            await hass.http.async_register_static_paths(
+                [StaticPathConfig(PANEL_STATIC_URL, str(frontend_dir), False)]
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Could not register static panel path (new API): %s", err)
+    elif hasattr(hass.http, "register_static_path"):
+        try:
+            hass.http.register_static_path(
+                PANEL_STATIC_URL,
+                str(frontend_dir),
+                cache_headers=False,
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Could not register static panel path (legacy API): %s", err)
 
     hass.http.register_view(NGAlarmConfigView)
     hass.http.register_view(NGAlarmReloadView)
