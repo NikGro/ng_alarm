@@ -351,24 +351,44 @@ class HAPanelNGAlarm extends HTMLElement {
     };
 
     host.append(
-      this._sel({ text: {} }, this._data.name || "NG Alarm", (v) => upd({ name: v || "NG Alarm" }), "Alarm name"),
+      this._sel(
+        { text: {} },
+        this._data.name || "NG Alarm",
+        (v) => upd({ name: v || "NG Alarm" }),
+        this._t("Alarm name", "Alarmname")
+      ),
       this._sel(
         {
           select: {
             mode: "dropdown",
             options: [
-              { value: "pin", label: "PIN keypad" },
-              { value: "password", label: "Password input" },
+              { value: "pin", label: this._t("PIN keypad", "PIN-Tastatur") },
+              { value: "password", label: this._t("Password input", "Passwort-Eingabe") },
             ],
           },
         },
         this._data.code_input_mode || "pin",
         (v) => upd({ code_input_mode: v || "pin" }),
-        "Code input mode"
+        this._t("Code input mode", "Code-Eingabemodus")
       ),
-      this._sel({ boolean: {} }, !!this._data.require_code_to_arm, (v) => upd({ require_code_to_arm: !!v }), "Code required for arming"),
-      this._sel({ boolean: {} }, !!this._data.require_code_to_mode_change, (v) => upd({ require_code_to_mode_change: !!v }), "Code required for mode change"),
-      this._sel({ boolean: {} }, !!this._data.require_code_to_disarm, (v) => upd({ require_code_to_disarm: !!v }), "Code required for disarming"),
+      this._sel(
+        { boolean: {} },
+        !!this._data.require_code_to_arm,
+        (v) => upd({ require_code_to_arm: !!v }),
+        this._t("Code required for arming", "Code für Scharfschalten erforderlich")
+      ),
+      this._sel(
+        { boolean: {} },
+        !!this._data.require_code_to_mode_change,
+        (v) => upd({ require_code_to_mode_change: !!v }),
+        this._t("Code required for mode change", "Code für Moduswechsel erforderlich")
+      ),
+      this._sel(
+        { boolean: {} },
+        !!this._data.require_code_to_disarm,
+        (v) => upd({ require_code_to_disarm: !!v }),
+        this._t("Code required for disarming", "Code für Unscharfschalten erforderlich")
+      ),
     );
   }
 
