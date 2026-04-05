@@ -15,6 +15,8 @@ from homeassistant.components.frontend import (
 from homeassistant.components.http import HomeAssistantView
 
 from .const import (
+    API_EVENTS,
+    API_EVENTS_CLEAR,
     API_GET_CONFIG,
     API_RELOAD,
     DOMAIN,
@@ -76,6 +78,37 @@ class NGAlarmReloadView(HomeAssistantView):
         return self.json({"ok": True, "config": runtime.config})
 
 
+class NGAlarmEventsView(HomeAssistantView):
+    """Expose event log for panel display."""
+
+    url = API_EVENTS
+    name = "api:ng_alarm:events"
+    requires_auth = True
+
+    async def get(self, request):
+        hass = request.app["hass"]
+        runtime = hass.data[DOMAIN][RUNTIME_STATE_KEY]
+        entity = runtime.entity
+        events = entity.get_event_log() if entity else []
+        return self.json({"events": events})
+
+
+class NGAlarmEventsClearView(HomeAssistantView):
+    """Clear event log from panel."""
+
+    url = API_EVENTS_CLEAR
+    name = "api:ng_alarm:events_clear"
+    requires_auth = True
+
+    async def post(self, request):
+        hass = request.app["hass"]
+        runtime = hass.data[DOMAIN][RUNTIME_STATE_KEY]
+        entity = runtime.entity
+        if entity:
+            await entity.async_clear_event_log()
+        return self.json({"ok": True})
+
+
 async def async_setup_panel(hass) -> None:
     """Register static frontend assets, API views and sidebar panel."""
     frontend_dir = Path(__file__).parent / "frontend"
@@ -104,6 +137,8 @@ async def async_setup_panel(hass) -> None:
 
     hass.http.register_view(NGAlarmConfigView)
     hass.http.register_view(NGAlarmReloadView)
+    hass.http.register_view(NGAlarmEventsView)
+    hass.http.register_view(NGAlarmEventsClearView)
 
     module_url = f"{PANEL_STATIC_URL}/{PANEL_JS_FILE}?v={int(time.time())}"
 

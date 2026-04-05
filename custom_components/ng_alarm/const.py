@@ -16,6 +16,8 @@ PANEL_JS_FILE = "ng_alarm_panel.js"
 API_GET_CONFIG = "/api/ng_alarm/config"
 API_SET_CONFIG = "/api/ng_alarm/config"
 API_RELOAD = "/api/ng_alarm/reload"
+API_EVENTS = "/api/ng_alarm/events"
+API_EVENTS_CLEAR = "/api/ng_alarm/events/clear"
 
 UNKNOWN = "unknown"
 
@@ -32,6 +34,14 @@ CONF_HOME_ACTIVE_SENSORS = "home_active_sensors"
 CONF_HOME_BYPASS_SENSORS = "home_bypass_sensors"
 CONF_BYPASS_ENTITIES = "bypass_entities"
 CONF_BYPASS_STATE = "bypass_state"
+CONF_BYPASS_MODE = "bypass_mode"
+CONF_BYPASS_TEMPLATE = "bypass_template"
+CONF_USERS = "users"
+CONF_ACTIONS = "actions"
+CONF_AWAY_TRIGGER_STATES = "away_trigger_states"
+CONF_HOME_TRIGGER_STATES = "home_trigger_states"
+CONF_IGNORE_UNKNOWN_STATES = "ignore_unknown_states"
+CONF_IGNORE_UNAVAILABLE_STATES = "ignore_unavailable_states"
 CONF_PENDING_SCRIPTS = "pending_scripts"
 CONF_TRIGGERED_SCRIPTS = "triggered_scripts"
 CONF_ARMED_AWAY_SCRIPTS = "armed_away_scripts"
@@ -39,10 +49,25 @@ CONF_ARMED_HOME_SCRIPTS = "armed_home_scripts"
 CONF_DISARMED_SCRIPTS = "disarmed_scripts"
 CONF_PANIC_SCRIPTS = "panic_scripts"
 
+CONF_USER_NAME = "name"
+CONF_USER_CODE = "code"
+CONF_USER_CAN_ARM = "can_arm"
+CONF_USER_CAN_DISARM = "can_disarm"
+CONF_USER_CAN_PANIC = "can_panic"
+
+CONF_ACTION_FROM = "from"
+CONF_ACTION_TO = "to"
+CONF_ACTION_THROUGH = "through"
+CONF_ACTION_SCRIPTS = "scripts"
+
+BYPASS_MODE_ENTITY_STATE = "entity_state"
+BYPASS_MODE_TEMPLATE = "template"
+
 ATTR_TRIGGERED_SENSOR = "triggered_sensor"
 ATTR_TRIGGERED_SENSOR_NAME = "triggered_sensor_name"
 ATTR_ALARM_MODE = "alarm_mode"
 ATTR_ALARM_STATE = "alarm_state"
+ATTR_ACTOR = "actor"
 
 DEFAULTS: dict = {
     CONF_NAME: "NG Alarm",
@@ -58,6 +83,14 @@ DEFAULTS: dict = {
     CONF_HOME_BYPASS_SENSORS: [],
     CONF_BYPASS_ENTITIES: [],
     CONF_BYPASS_STATE: "cleaning",
+    CONF_BYPASS_MODE: BYPASS_MODE_ENTITY_STATE,
+    CONF_BYPASS_TEMPLATE: "",
+    CONF_USERS: [],
+    CONF_ACTIONS: [],
+    CONF_AWAY_TRIGGER_STATES: ["on"],
+    CONF_HOME_TRIGGER_STATES: ["on"],
+    CONF_IGNORE_UNKNOWN_STATES: True,
+    CONF_IGNORE_UNAVAILABLE_STATES: True,
     CONF_PENDING_SCRIPTS: [],
     CONF_TRIGGERED_SCRIPTS: [],
     CONF_ARMED_AWAY_SCRIPTS: [],
@@ -72,6 +105,8 @@ LIST_KEYS = {
     CONF_HOME_ACTIVE_SENSORS,
     CONF_HOME_BYPASS_SENSORS,
     CONF_BYPASS_ENTITIES,
+    CONF_AWAY_TRIGGER_STATES,
+    CONF_HOME_TRIGGER_STATES,
     CONF_PENDING_SCRIPTS,
     CONF_TRIGGERED_SCRIPTS,
     CONF_ARMED_AWAY_SCRIPTS,
