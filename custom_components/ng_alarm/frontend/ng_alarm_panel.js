@@ -10,6 +10,7 @@ class HAPanelNGAlarm extends HTMLElement {
     this._selectedEventZone = "all";
     this._openZoneDetails = {};
     this._openGlobalBypassDetails = {};
+    this._openSensorDetails = {};
     this._sensorConfigClipboard = null;
     this._sensorDropIndicator = null;
     this._autosaveTimer = null;
@@ -149,8 +150,10 @@ class HAPanelNGAlarm extends HTMLElement {
           cursor:pointer;
         }
         .btn.primary { border:none; background: var(--primary-color); color:white; font-weight:600; border-radius: 999px; }
+        .btn.pill-gray { border:none; background: var(--secondary-background-color); color: var(--primary-text-color); border-radius: 999px; }
         .btn-save { min-height: 44px; padding: 10px 18px; font-size: 1rem; white-space: nowrap; min-width: 170px; }
         .btn.danger { border:none; background:#b00020; color:#fff; margin-top: 0; border-radius: 999px; }
+        .btn.danger-soft { border:none; background:#b00020; color:#fff; border-radius: 10px; }
         .item .btn.danger { margin-top: 10px; }
         #events .btn.danger { margin-top: 0; }
         #modes-add, #global-bypass-add, #sensors-add, #users-add, #actions-add { margin-top: 10px; }
@@ -288,13 +291,12 @@ class HAPanelNGAlarm extends HTMLElement {
           <ha-card header="Event Log">
             <div class="muted" style="margin-bottom:8px">Review alarm history across all zones and export or clear entries.</div>
             <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
-              <label class="muted" for="events-zone" style="margin-right:4px">Zone</label>
               <select id="events-zone" class="btn" style="min-width:140px">
                 <option value="all">All zones</option>
               </select>
               <button id="events-refresh" class="btn" type="button">Refresh</button>
               <button id="events-export" class="btn" type="button">Export JSON</button>
-              <button id="events-clear" class="btn danger" type="button">Clear</button>
+              <button id="events-clear" class="btn danger-soft" type="button">Clear</button>
             </div>
             <div id="events-sensor-toggle" style="margin-bottom:10px"></div>
             <div id="events-list"></div>
@@ -818,7 +820,13 @@ class HAPanelNGAlarm extends HTMLElement {
       });
 
       const details = document.createElement("details");
-      details.open = !rule.entity_id;
+      const sensorKey = (rule.entity_id || `sensor_${idx}`).toString();
+      details.open = Object.prototype.hasOwnProperty.call(this._openSensorDetails, sensorKey)
+        ? !!this._openSensorDetails[sensorKey]
+        : !rule.entity_id;
+      details.addEventListener("toggle", () => {
+        this._openSensorDetails[sensorKey] = details.open;
+      });
       const summary = document.createElement("summary");
       const st = rule.entity_id ? this._hass?.states?.[rule.entity_id] : null;
       const icon = this._sensorIcon(st);
@@ -921,7 +929,7 @@ class HAPanelNGAlarm extends HTMLElement {
       });
 
       const copyBtn = document.createElement("button");
-      copyBtn.className = "btn primary";
+      copyBtn.className = "btn pill-gray";
       copyBtn.type = "button";
       copyBtn.textContent = "Copy config";
       copyBtn.addEventListener("click", () => {
@@ -935,10 +943,11 @@ class HAPanelNGAlarm extends HTMLElement {
           trigger_unknown_unavailable: !!current.trigger_unknown_unavailable,
         };
         this._status("Sensor config copied.", "ok");
+        this._flashButtonText(copyBtn, "Copied!", 1200);
       });
 
       const pasteBtn = document.createElement("button");
-      pasteBtn.className = "btn primary";
+      pasteBtn.className = "btn pill-gray";
       pasteBtn.type = "button";
       pasteBtn.textContent = "Paste config";
       pasteBtn.addEventListener("click", () => {
@@ -1113,11 +1122,49 @@ class HAPanelNGAlarm extends HTMLElement {
         this._scheduleAutosave();
       });
 
+      const test = document.createElement("button");
+      test.className = "btn pill-gray";
+      test.type = "button";
+      test.textContent = "Test action";
+      const testResult = document.createElement("span");
+      testResult.className = "inline-test-result";
+      test.addEventListener("click", async () => {
+        const current = (this._data.actions || [])[idx] || {};
+        const ok = await this._runActionTest(current);
+        testResult.classList.remove("ok", "err");
+        testResult.classList.add(ok ? "ok" : "err");
+        testResult.textContent = ok ? "Executed" : "Failed";
+      });
+
+      const btnRow = document.createElement("div");
+      btnRow.className = "action-btn-row";
+      btnRow.append(test, del, testResult);
+
       details.appendChild(row);
-      details.appendChild(del);
+      details.appendChild(btnRow);
       item.appendChild(details);
       host.appendChild(item);
     });
+  }
+
+  async _runActionTest(action) {
+    try {
+      const targets = action.targets || action.scripts || [];
+      if (!Array.isArray(targets) || !targets.length) return false;
+      for (const entityId of targets) {
+        const [domain] = String(entityId || "").split(".", 1);
+        if (domain === "script") {
+          await this._hass.callService("script", "turn_on", { entity_id: entityId, variables: { test: true } });
+        } else {
+          await this._hass.callService("homeassistant", "turn_on", { entity_id: entityId });
+        }
+      }
+      this._status("Action test executed.", "ok");
+      return true;
+    } catch (err) {
+      this._status(`Action test failed: ${err.message}`, "error");
+      return false;
+    }
   }
 
   async _loadConfig() {
@@ -1267,11 +1314,24 @@ class HAPanelNGAlarm extends HTMLElement {
 
       await this._hass.callApi("post", "ng_alarm/config", payload);
       this._status(isAutosave ? "Autosaved." : "Saved and runtime reloaded.", "ok");
+      if (!isAutosave) {
+        const saveBtn = this.shadowRoot.getElementById("save");
+        this._flashButtonText(saveBtn, "Saved!", 1400, "Save & Reload");
+      }
     } catch (err) {
       this._status(`Save failed: ${err.message}`, "error");
     } finally {
       this._autosaveInFlight = false;
     }
+  }
+
+  _flashButtonText(button, text, ms = 1200, restoreText = null) {
+    if (!button) return;
+    const original = restoreText || button.textContent;
+    button.textContent = text;
+    setTimeout(() => {
+      button.textContent = original;
+    }, ms);
   }
 
   _status(text, level = "") {
