@@ -28,6 +28,7 @@ from .const import (
     CONF_ACTION_BY_USER,
     CONF_ACTION_FROM,
     CONF_ACTION_SCRIPTS,
+    CONF_ACTION_TARGETS,
     CONF_ACTION_THROUGH,
     CONF_ACTION_TO,
     CONF_ARMED_AWAY_SCRIPTS,
@@ -55,6 +56,7 @@ from .const import (
     CONF_PENDING_SCRIPTS,
     CONF_REQUIRE_CODE_TO_ARM,
     CONF_SENSOR_RULES,
+    CONF_SENSOR_TRIGGER_UNKNOWN_UNAVAILABLE,
     CONF_TRIGGERED_SCRIPTS,
     CONF_USERS,
     CONF_USER_CAN_ARM,
@@ -244,6 +246,15 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 return _normalize_mode_id(mode.get("id"))
         return _normalize_mode_id(modes[0].get("id"))
 
+    def _mode_delay(self, kind: str, default: int) -> int:
+        mode = self._mode_config()
+        if not mode:
+            return default
+        try:
+            return max(0, int(mode.get(kind, default)))
+        except (TypeError, ValueError):
+            return default
+
     def _authorize_arm(self, code: str | None, mode_id: str) -> str | None:
         require_code = bool(self._config.get(CONF_REQUIRE_CODE_TO_ARM, True))
         mode_id = _normalize_mode_id(mode_id)
@@ -305,13 +316,22 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             if by_user not in {"", "any"} and by_user != str(self._last_actor).strip().lower():
                 continue
 
-            for entity_id in action.get(CONF_ACTION_SCRIPTS, []):
-                await self.hass.services.async_call(
-                    "script",
-                    "turn_on",
-                    {"entity_id": entity_id, "variables": variables},
-                    blocking=False,
-                )
+            for entity_id in action.get(CONF_ACTION_TARGETS, action.get(CONF_ACTION_SCRIPTS, [])):
+                domain = str(entity_id).split(".", 1)[0]
+                if domain == "script":
+                    await self.hass.services.async_call(
+                        "script",
+                        "turn_on",
+                        {"entity_id": entity_id, "variables": variables},
+                        blocking=False,
+                    )
+                else:
+                    await self.hass.services.async_call(
+                        "homeassistant",
+                        "turn_on",
+                        {"entity_id": entity_id},
+                        blocking=False,
+                    )
 
     async def _async_run_scripts(self, key: str, alarm_state: str) -> None:
         variables = {
@@ -350,7 +370,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._bypass_unsub()
             self._bypass_unsub = None
 
-        entities: set[str] = set(self._config.get(CONF_BYPASS_ENTITIES, []) or [])
+        entities: set[str] = set()
         for mode in self._config.get(CONF_MODES, []) or []:
             entities.update(mode.get("bypass_entities", []) or [])
 
@@ -389,21 +409,6 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                     return True
             return False
 
-        if self._config.get(CONF_BYPASS_MODE) == BYPASS_MODE_TEMPLATE:
-            tpl = str(self._config.get(CONF_BYPASS_TEMPLATE, "")).strip()
-            if not tpl:
-                return False
-            try:
-                rendered = Template(tpl, self.hass).async_render(parse_result=False)
-                return result_as_boolean(rendered)
-            except TemplateError as err:
-                _LOGGER.debug("Bypass template render failed: %s", err)
-                return False
-
-        for entity_id in self._config.get(CONF_BYPASS_ENTITIES, []):
-            state = self.hass.states.get(entity_id)
-            if state and str(state.state).lower() in {"on", "true", "1", "home", "open"}:
-                return True
         return False
 
     def _trigger_states(self) -> set[str]:
@@ -493,8 +498,9 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         ignore_unknown = self._config.get(CONF_IGNORE_UNKNOWN_STATES, True)
         ignore_unavailable = self._config.get(CONF_IGNORE_UNAVAILABLE_STATES, True)
         if rule:
-            ignore_unknown = not bool(rule.get("trigger_unknown", False))
-            ignore_unavailable = not bool(rule.get("trigger_unavailable", False))
+            combined = bool(rule.get(CONF_SENSOR_TRIGGER_UNKNOWN_UNAVAILABLE, False))
+            ignore_unknown = not (combined or bool(rule.get("trigger_unknown", False)))
+            ignore_unavailable = not (combined or bool(rule.get("trigger_unavailable", False)))
 
         if new_state_value == "unknown" and ignore_unknown:
             return
@@ -529,11 +535,16 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         await self._async_run_transition_actions(prev, "pending", "pending")
         await self._async_run_scripts(CONF_PENDING_SCRIPTS, "pending")
 
-        delay = self._config.get(
-            CONF_ENTRY_DELAY_AWAY
-            if self._armed_mode == AlarmControlPanelState.ARMED_AWAY
-            else CONF_ENTRY_DELAY_HOME,
-            0,
+        delay = self._mode_delay(
+            "entry_delay",
+            int(
+                self._config.get(
+                    CONF_ENTRY_DELAY_AWAY
+                    if self._armed_mode == AlarmControlPanelState.ARMED_AWAY
+                    else CONF_ENTRY_DELAY_HOME,
+                    0,
+                )
+            ),
         )
         self._cancel_timers()
         self._entry_unsub = async_call_later(self.hass, delay, self._async_finish_entry_delay)
@@ -578,7 +589,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             await self._async_log_event("denied", "Denied arm away: no modes configured")
             return
         await self._async_arm(
-            AlarmControlPanelState.ARMED_AWAY, int(self._config.get(CONF_EXIT_DELAY_AWAY, 0))
+            AlarmControlPanelState.ARMED_AWAY,
+            self._mode_delay("exit_delay", int(self._config.get(CONF_EXIT_DELAY_AWAY, 0))),
         )
 
     async def async_alarm_arm_home(self, code=None) -> None:
@@ -592,7 +604,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             await self._async_log_event("denied", "Denied arm home: no modes configured")
             return
         await self._async_arm(
-            AlarmControlPanelState.ARMED_HOME, int(self._config.get(CONF_EXIT_DELAY_HOME, 0))
+            AlarmControlPanelState.ARMED_HOME,
+            self._mode_delay("exit_delay", int(self._config.get(CONF_EXIT_DELAY_HOME, 0))),
         )
 
     async def _async_arm(self, mode: AlarmControlPanelState, delay: int) -> None:

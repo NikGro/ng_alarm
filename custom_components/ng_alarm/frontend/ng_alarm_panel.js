@@ -164,34 +164,9 @@ class HAPanelNGAlarm extends HTMLElement {
     form.data = this._data;
     form.schema = [
       { name: "require_code_to_arm", selector: { boolean: {} } },
-      { name: "exit_delay_away", selector: { number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } } },
-      { name: "entry_delay_away", selector: { number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } } },
-      { name: "exit_delay_home", selector: { number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } } },
-      { name: "entry_delay_home", selector: { number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } } },
-      {
-        name: "bypass_mode",
-        selector: {
-          select: {
-            mode: "dropdown",
-            options: [
-              { value: "entity_state", label: "Entity state" },
-              { value: "template", label: "Template" },
-            ],
-          },
-        },
-      },
-      { name: "bypass_entities", selector: { entity: { multiple: true } } },
-      { name: "bypass_template", selector: { template: {} } },
     ];
     form.computeLabel = (item) => ({
       require_code_to_arm: "Code required for arming",
-      exit_delay_away: "Exit delay away",
-      entry_delay_away: "Entry delay away",
-      exit_delay_home: "Exit delay home",
-      entry_delay_home: "Entry delay home",
-      bypass_mode: "Global bypass mode (fallback)",
-      bypass_entities: "Global bypass entities (true = bypass)",
-      bypass_template: "Global bypass template",
     }[item.name] || item.name);
     form.addEventListener("value-changed", (ev) => {
       this._data = { ...this._data, ...ev.detail.value };
@@ -206,7 +181,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("modes-add").addEventListener("click", () => {
       const modes = [...(this._data.modes || [])];
-      modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", bypass_mode: "none", bypass_entities: [], bypass_template: "" });
+      modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", exit_delay: 60, entry_delay: 30, bypass_mode: "none", bypass_entities: [], bypass_template: "" });
       this._data.modes = modes;
       this._renderModes();
     });
@@ -293,6 +268,8 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ text: {} }, mode.name || "", (v) => upd({ name: v }), "Mode name"),
         this._sel({ icon: {} }, mode.icon || "mdi:shield", (v) => upd({ icon: v }), "Mode icon"),
         this._sel({ select: { mode: "dropdown", options: [{ value: "away", label: "Away" }, { value: "home", label: "Home" }] } }, mode.arm_target || "away", (v) => upd({ arm_target: v }), "Arm target"),
+        this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, mode.exit_delay ?? 60, (v) => upd({ exit_delay: Number(v || 0) }), "Exit delay"),
+        this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, mode.entry_delay ?? 30, (v) => upd({ entry_delay: Number(v || 0) }), "Entry delay"),
         this._sel({ select: { mode: "dropdown", options: [{ value: "none", label: "No bypass" }, { value: "entity_state", label: "Entity state" }, { value: "template", label: "Template" }] } }, mode.bypass_mode || "none", (v) => { upd({ bypass_mode: v }); this._renderModes(); }, "Bypass mode"),
       );
 
@@ -337,7 +314,10 @@ class HAPanelNGAlarm extends HTMLElement {
       const details = document.createElement("details");
       details.open = !rule.entity_id;
       const summary = document.createElement("summary");
-      summary.textContent = rule.entity_id || `Sensor rule #${idx + 1}`;
+      const st = rule.entity_id ? this._hass?.states?.[rule.entity_id] : null;
+      const icon = st?.attributes?.icon || "mdi:motion-sensor";
+      const name = st?.attributes?.friendly_name || rule.entity_id || `Sensor rule #${idx + 1}`;
+      summary.innerHTML = `<ha-icon icon="${icon}"></ha-icon> ${name}`;
       details.appendChild(summary);
 
       const row = document.createElement("div");
@@ -347,17 +327,19 @@ class HAPanelNGAlarm extends HTMLElement {
         const rules = [...(this._data.sensor_rules || [])];
         rules[idx] = { ...rules[idx], ...patch };
         this._data.sensor_rules = rules;
-        summary.textContent = rules[idx].entity_id || `Sensor rule #${idx + 1}`;
+        const s = rules[idx].entity_id ? this._hass?.states?.[rules[idx].entity_id] : null;
+        const iconNow = s?.attributes?.icon || "mdi:motion-sensor";
+        const nameNow = s?.attributes?.friendly_name || rules[idx].entity_id || `Sensor rule #${idx + 1}`;
+        summary.innerHTML = `<ha-icon icon="${iconNow}"></ha-icon> ${nameNow}`;
       };
 
       row.append(
         this._sel({ entity: { filter: { domain: "binary_sensor" } } }, rule.entity_id || "", (v) => upd({ entity_id: v }), "Sensor"),
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.modes || [], (v) => upd({ modes: v || [] }), "Modes"),
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.bypass_modes || [], (v) => upd({ bypass_modes: v || [] }), "Bypass in modes"),
-        this._sel({ boolean: {} }, !!rule.allow_open_arm, (v) => upd({ allow_open_arm: !!v }), "Allow open when arming"),
-        this._sel({ boolean: {} }, !!rule.trigger_on_close_only, (v) => upd({ trigger_on_close_only: !!v }), "Trigger only on close"),
-        this._sel({ boolean: {} }, !!rule.trigger_unknown, (v) => upd({ trigger_unknown: !!v }), "Trigger when unknown"),
-        this._sel({ boolean: {} }, !!rule.trigger_unavailable, (v) => upd({ trigger_unavailable: !!v }), "Trigger when unavailable"),
+        this._sel({ boolean: {} }, !rule.allow_open_arm, (v) => upd({ allow_open_arm: !v }), "Prohibit arming when open"),
+        this._sel({ boolean: {} }, !!rule.trigger_on_close_only, (v) => upd({ trigger_on_close_only: !!v }), "Trigger only when closing"),
+        this._sel({ boolean: {} }, !!rule.trigger_unknown_unavailable, (v) => upd({ trigger_unknown_unavailable: !!v }), "Trigger when becomes unknown OR unavailable"),
       );
 
       const del = document.createElement("button");
@@ -456,7 +438,7 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ select: { mode: "dropdown", options: stateOptions } }, (action.to || ["any"])[0] || "any", (v) => upd({ to: [v || "any"] }), "To state"),
         this._sel({ select: { mode: "dropdown", options: throughOptions } }, (action.through || ["any"])[0] || "any", (v) => upd({ through: [v || "any"] }), "Through mode"),
         this._sel({ select: { mode: "dropdown", options: userOptions } }, action.by_user || "any", (v) => upd({ by_user: v || "any" }), "By user"),
-        this._sel({ entity: { multiple: true, filter: { domain: "script" } } }, action.scripts || [], (v) => upd({ scripts: v || [] }), "Scripts"),
+        this._sel({ entity: { multiple: true } }, action.targets || action.scripts || [], (v) => upd({ targets: v || [], scripts: v || [] }), "Targets (any turn_on entity)"),
       );
 
       const del = document.createElement("button");

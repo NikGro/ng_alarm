@@ -14,6 +14,7 @@ from .const import (
     CONF_ACTION_BY_USER,
     CONF_ACTION_FROM,
     CONF_ACTION_SCRIPTS,
+    CONF_ACTION_TARGETS,
     CONF_ACTION_THROUGH,
     CONF_ACTION_TO,
     CONF_AWAY_TRIGGER_STATES,
@@ -25,6 +26,7 @@ from .const import (
     CONF_MODES,
     CONF_REQUIRE_CODE_TO_ARM,
     CONF_SENSOR_RULES,
+    CONF_SENSOR_TRIGGER_UNKNOWN_UNAVAILABLE,
     CONF_USERS,
     CONF_USER_CAN_ARM,
     CONF_USER_CAN_DISARM,
@@ -115,12 +117,25 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
             arm_target = "away"
         if bypass_mode not in {"none", "entity_state", "template"}:
             bypass_mode = "none"
+        exit_delay = mode.get("exit_delay", DEFAULTS.get("exit_delay_away", 60))
+        entry_delay = mode.get("entry_delay", DEFAULTS.get("entry_delay_away", 30))
+        try:
+            exit_delay = max(0, int(exit_delay))
+        except (TypeError, ValueError):
+            exit_delay = 60
+        try:
+            entry_delay = max(0, int(entry_delay))
+        except (TypeError, ValueError):
+            entry_delay = 30
+
         modes.append(
             {
                 "id": mode_id,
                 "name": name,
                 "icon": icon,
                 "arm_target": arm_target,
+                "exit_delay": exit_delay,
+                "entry_delay": entry_delay,
                 "bypass_mode": bypass_mode,
                 "bypass_entities": bypass_entities,
                 "bypass_state": bypass_state,
@@ -145,6 +160,9 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                 "trigger_on_close_only": bool(rule.get("trigger_on_close_only", False)),
                 "trigger_unknown": bool(rule.get("trigger_unknown", False)),
                 "trigger_unavailable": bool(rule.get("trigger_unavailable", False)),
+                CONF_SENSOR_TRIGGER_UNKNOWN_UNAVAILABLE: bool(
+                    rule.get(CONF_SENSOR_TRIGGER_UNKNOWN_UNAVAILABLE, False)
+                ),
             }
         )
     data[CONF_SENSOR_RULES] = sensor_rules
@@ -184,8 +202,8 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     for action in data.get(CONF_ACTIONS, []) or []:
         if not isinstance(action, dict):
             continue
-        scripts = [str(v) for v in action.get(CONF_ACTION_SCRIPTS, []) if str(v).strip()]
-        if not scripts:
+        targets = [str(v) for v in action.get(CONF_ACTION_TARGETS, action.get(CONF_ACTION_SCRIPTS, [])) if str(v).strip()]
+        if not targets:
             continue
         actions.append(
             {
@@ -205,7 +223,8 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                     if str(v).strip()
                 ],
                 CONF_ACTION_BY_USER: str(action.get(CONF_ACTION_BY_USER, "any") or "any").strip(),
-                CONF_ACTION_SCRIPTS: scripts,
+                CONF_ACTION_TARGETS: targets,
+                CONF_ACTION_SCRIPTS: targets,
             }
         )
     data[CONF_ACTIONS] = actions
