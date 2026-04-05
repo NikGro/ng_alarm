@@ -56,6 +56,7 @@ class NGAlarmRuntime:
     entity: Any | None = None
     entities: list[Any] | None = None
     event_sensor: Any | None = None
+    event_sensors: list[Any] | None = None
 
 
 def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:

@@ -148,7 +148,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         zone_cfg = self._mode_config(self._zone_id) if self._zone_id else None
         zone_name = (zone_cfg or {}).get("name") if zone_cfg else None
         base_name = config.get(CONF_NAME, "NG Alarm")
-        self._attr_name = f"{base_name} - {zone_name}" if zone_name else base_name
+        self._attr_name = str(zone_name) if zone_name else base_name
         self._attr_unique_id = f"{DOMAIN}_{self._zone_id or 'main'}"
 
         self._alarm_state = AlarmControlPanelState.DISARMED
@@ -157,6 +157,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._triggered_sensor_name = UNKNOWN
         self._last_actor = UNKNOWN
         self._current_mode_id = self._zone_id or UNKNOWN
+        self._current_arm_type = UNKNOWN
         self._event_log: list[dict[str, Any]] = []
 
         self._exit_unsub = None
@@ -209,6 +210,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             ATTR_ALARM_MODE: _state_str(self._armed_mode) if self._armed_mode else UNKNOWN,
             ATTR_ACTOR: self._last_actor,
             "current_mode": self._current_mode_id,
+            "current_arm_type": self._current_arm_type,
         }
 
     async def async_added_to_hass(self) -> None:
@@ -234,6 +236,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._triggered_sensor_name = saved.get("triggered_sensor_name", UNKNOWN)
             self._last_actor = saved.get("last_actor", UNKNOWN)
             self._current_mode_id = saved.get("current_mode_id", UNKNOWN)
+            self._current_arm_type = saved.get("current_arm_type", UNKNOWN)
             self._event_log = list(saved.get("event_log", []))[-200:]
 
         await self._async_bind_bypass_listener()
@@ -256,8 +259,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._async_refresh_sensor_listener()
         self.async_write_ha_state()
         runtime = self.hass.data.get(DOMAIN, {}).get(RUNTIME_STATE_KEY)
-        if runtime and runtime.event_sensor:
-            runtime.event_sensor.async_write_ha_state()
+        if runtime:
+            for s in (runtime.event_sensors or ([runtime.event_sensor] if runtime.event_sensor else [])):
+                if s:
+                    s.async_write_ha_state()
 
     async def _async_persist_runtime(self) -> None:
         await self._store.async_save(
@@ -268,6 +273,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 "triggered_sensor_name": self._triggered_sensor_name,
                 "last_actor": self._last_actor,
                 "current_mode_id": self._current_mode_id,
+                "current_arm_type": self._current_arm_type,
                 "event_log": self._event_log[-200:],
             }
         )
@@ -281,8 +287,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._event_log = []
         await self._async_persist_runtime()
         runtime = self.hass.data.get(DOMAIN, {}).get(RUNTIME_STATE_KEY)
-        if runtime and runtime.event_sensor:
-            runtime.event_sensor.async_write_ha_state()
+        if runtime:
+            for s in (runtime.event_sensors or ([runtime.event_sensor] if runtime.event_sensor else [])):
+                if s:
+                    s.async_write_ha_state()
 
     async def _async_log_event(self, event_type: str, message: str, **meta: Any) -> None:
         entry = {
@@ -291,18 +299,23 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             "message": message,
             "state": _state_str(self._alarm_state),
             "mode": _state_str(self._armed_mode) if self._armed_mode else UNKNOWN,
+            "zone": self._zone_id or "main",
+            "arm_type": self._current_arm_type,
             "actor": self._last_actor,
             "from_state": meta.get("from_state", UNKNOWN),
             "to_state": meta.get("to_state", _state_str(self._alarm_state)),
             "by": meta.get("by", self._last_actor),
+            "is_panic": bool(meta.get("is_panic", False)),
         }
         entry.update({k: v for k, v in meta.items() if v is not None})
         self._event_log.append(entry)
         self._event_log = self._event_log[-200:]
         await self._async_persist_runtime()
         runtime = self.hass.data.get(DOMAIN, {}).get(RUNTIME_STATE_KEY)
-        if runtime and runtime.event_sensor:
-            runtime.event_sensor.async_write_ha_state()
+        if runtime:
+            for s in (runtime.event_sensors or ([runtime.event_sensor] if runtime.event_sensor else [])):
+                if s:
+                    s.async_write_ha_state()
 
     def _resolve_user_from_code(self, code: str | None) -> dict[str, Any] | None:
         entered = str(code or "")
@@ -375,9 +388,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             user = self._resolve_user_from_code(code)
             if not user or not bool(user.get(CONF_USER_CAN_ARM, False)):
                 return None
-            allowed = [_normalize_mode_id(v) for v in user.get(CONF_USER_ARM_MODES, [])]
-            if allowed and mode_id not in allowed:
-                return None
+            allowed_raw = [str(v).strip().lower() for v in user.get(CONF_USER_ARM_MODES, []) if str(v).strip()]
+            if allowed_raw:
+                allowed_zone = {_normalize_mode_id(v.split(":", 1)[0]) for v in allowed_raw}
+                allowed_pairs = set(allowed_raw)
+                current_pair = f"{mode_id}:{self._current_arm_type}"
+                if mode_id not in allowed_zone and current_pair not in allowed_pairs:
+                    return None
             return self._actor_name(user)
 
         # No legacy master code: allow arming only when code is optional.
@@ -454,6 +471,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             ATTR_ALARM_MODE: self._current_mode_id if self._current_mode_id != UNKNOWN else (_state_str(self._armed_mode) if self._armed_mode else UNKNOWN),
             ATTR_ALARM_STATE: alarm_state,
             ATTR_ACTOR: self._last_actor,
+            "zone": self._zone_id or "main",
+            "arm_type": self._current_arm_type,
         }
         for entity_id in self._config.get(key, []):
             await self.hass.services.async_call(
@@ -561,12 +580,17 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 entity_id = str(rule.get("entity_id", "")).strip()
                 if not entity_id:
                     continue
-                modes = [_normalize_mode_id(v) for v in rule.get("modes", [])]
-                if modes and self._current_mode_id not in modes:
-                    continue
-                bypass_modes = [_normalize_mode_id(v) for v in rule.get("bypass_modes", [])]
-                if bypass_active and self._current_mode_id in bypass_modes:
-                    continue
+                modes_raw = [str(v).strip().lower() for v in rule.get("modes", []) if str(v).strip()]
+                current_pair = f"{self._current_mode_id}:{self._current_arm_type}"
+                if modes_raw:
+                    mode_ids = {_normalize_mode_id(v.split(":", 1)[0]) for v in modes_raw}
+                    if self._current_mode_id not in mode_ids and current_pair not in set(modes_raw):
+                        continue
+                bypass_raw = [str(v).strip().lower() for v in rule.get("bypass_modes", []) if str(v).strip()]
+                if bypass_active and bypass_raw:
+                    bypass_ids = {_normalize_mode_id(v.split(":", 1)[0]) for v in bypass_raw}
+                    if self._current_mode_id in bypass_ids or current_pair in set(bypass_raw):
+                        continue
                 result.append(entity_id)
             return result
 
@@ -724,6 +748,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             await self._async_log_event("denied", "Denied arm away: code/permission/mode mismatch")
             return
         self._last_actor = actor
+        self._current_arm_type = "away"
         if self._current_mode_id == UNKNOWN:
             await self._async_log_event("denied", "Denied arm away: no modes configured")
             return
@@ -740,6 +765,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             await self._async_log_event("denied", "Denied arm home: code/permission/mode mismatch")
             return
         self._last_actor = actor
+        self._current_arm_type = "home"
         if self._current_mode_id == UNKNOWN:
             await self._async_log_event("denied", "Denied arm home: no modes configured")
             return
@@ -756,6 +782,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             await self._async_log_event("denied", "Denied arm night: code/permission/mode mismatch")
             return
         self._last_actor = actor
+        self._current_arm_type = "night"
         if self._current_mode_id == UNKNOWN:
             await self._async_log_event("denied", "Denied arm night: no modes configured")
             return
@@ -772,6 +799,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             await self._async_log_event("denied", "Denied arm vacation: code/permission/mode mismatch")
             return
         self._last_actor = actor
+        self._current_arm_type = "vacation"
         if self._current_mode_id == UNKNOWN:
             await self._async_log_event("denied", "Denied arm vacation: no modes configured")
             return
@@ -849,10 +877,14 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             if not bool(user.get(CONF_USER_CAN_DISARM, False)):
                 await self._async_log_event("denied", "Denied disarm: missing disarm permission")
                 return
-            allowed = [_normalize_mode_id(v) for v in user.get(CONF_USER_DISARM_MODES, [])]
-            if allowed and self._current_mode_id not in allowed and self._current_mode_id != UNKNOWN:
-                await self._async_log_event("denied", "Denied disarm: mode not allowed for user")
-                return
+            allowed_raw = [str(v).strip().lower() for v in user.get(CONF_USER_DISARM_MODES, []) if str(v).strip()]
+            if allowed_raw and self._current_mode_id != UNKNOWN:
+                allowed_zone = {_normalize_mode_id(v.split(":", 1)[0]) for v in allowed_raw}
+                allowed_pairs = set(allowed_raw)
+                current_pair = f"{self._current_mode_id}:{self._current_arm_type}"
+                if self._current_mode_id not in allowed_zone and current_pair not in allowed_pairs:
+                    await self._async_log_event("denied", "Denied disarm: mode not allowed for user")
+                    return
             panic = bool(user.get(CONF_USER_CAN_PANIC, False)) and bool(
                 str(code or "").strip()
             )
@@ -870,6 +902,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._alarm_state = AlarmControlPanelState.DISARMED
         self._armed_mode = None
         self._current_mode_id = UNKNOWN
+        self._current_arm_type = UNKNOWN
         self._triggered_sensor = UNKNOWN
         self._triggered_sensor_name = UNKNOWN
         self.async_write_ha_state()
@@ -914,6 +947,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._alarm_state = AlarmControlPanelState.DISARMED
             self._armed_mode = None
             self._current_mode_id = UNKNOWN
+            self._current_arm_type = UNKNOWN
             self._triggered_sensor = UNKNOWN
             self._triggered_sensor_name = UNKNOWN
             self._remove_listeners()

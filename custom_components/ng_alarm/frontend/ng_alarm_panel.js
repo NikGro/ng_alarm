@@ -107,13 +107,15 @@ class HAPanelNGAlarm extends HTMLElement {
       </style>
 
       <div class="wrap">
-        <div class="head">
+        <div class="head" style="border:1px solid var(--divider-color);border-radius:10px;padding:6px 8px;">
+          <button id="open-sidebar" class="btn" type="button" style="width:36px;height:36px;padding:0" title="Open sidebar">
+            <ha-icon icon="mdi:menu"></ha-icon>
+          </button>
           <img class="logo" src="/ng_alarm_static/alarm_icon.jpg" alt="Alarm Icon" />
           <div>
             <h1>Alarm</h1>
             <div class="muted" id="subtitle"></div>
           </div>
-          <button id="open-sidebar" class="btn" type="button" style="margin-left:auto">☰ Open sidebar</button>
         </div>
 
         <div class="tabs">
@@ -159,7 +161,7 @@ class HAPanelNGAlarm extends HTMLElement {
             <div id="actions-list" class="list"></div>
             <button id="actions-add" class="btn" type="button">+ Add action</button>
             <div class="muted" style="margin-top:10px">
-              Script/target variables available: <code>from_state</code>, <code>to_state</code>, <code>alarm_mode</code>, <code>actor</code>, <code>triggered_sensor</code>, <code>triggered_sensor_name</code>.
+              Script/target variables available: <code>from_state</code>, <code>to_state</code>, <code>alarm_mode</code>, <code>zone</code>, <code>arm_type</code>, <code>actor</code>, <code>triggered_sensor</code>, <code>triggered_sensor_name</code>.
             </div>
           </ha-card>
         </div>
@@ -263,7 +265,24 @@ class HAPanelNGAlarm extends HTMLElement {
   }
 
   _modeOptions() {
-    return (this._data.modes || []).map((m) => ({ value: m.id || "", label: m.name || m.id || "mode" }));
+    return (this._data.modes || []).map((m) => ({ value: m.id || "", label: m.name || m.id || "zone" }));
+  }
+
+  _zoneModeOptions() {
+    const opts = [];
+    (this._data.modes || []).forEach((z) => {
+      const zid = z.id || "";
+      const zname = z.name || zid || "zone";
+      if (!zid) return;
+      opts.push({ value: zid, label: `${zname} (all arm types)` });
+      const armTypes = Array.isArray(z.arm_types) && z.arm_types.length ? z.arm_types : [z.arm_target || "away"];
+      armTypes.forEach((t) => {
+        const tt = String(t || "").toLowerCase();
+        if (!tt) return;
+        opts.push({ value: `${zid}:${tt}`, label: `${zname} > ${tt}` });
+      });
+    });
+    return opts;
   }
 
   _renderModes() {
@@ -341,7 +360,7 @@ class HAPanelNGAlarm extends HTMLElement {
     const host = this.shadowRoot.getElementById("sensors-list");
     if (!host) return;
     host.innerHTML = "";
-    const modeOptions = this._modeOptions();
+    const modeOptions = this._zoneModeOptions();
 
     (this._data.sensor_rules || []).forEach((rule, idx) => {
       const item = document.createElement("div");
@@ -428,7 +447,7 @@ class HAPanelNGAlarm extends HTMLElement {
         summary.innerHTML = `<ha-icon icon="${userIconNow}"></ha-icon> ${iu.name || `User #${idx + 1}`}`;
       };
 
-      const modeOptions = this._modeOptions();
+      const modeOptions = this._zoneModeOptions();
       row.append(
         this._sel({ text: {} }, u.name || "", (v) => upd({ name: v }), "Name"),
         this._sel({ text: { type: "password" } }, u.code || "", (v) => upd({ code: v }), "Code"),
@@ -607,10 +626,18 @@ class HAPanelNGAlarm extends HTMLElement {
         host.innerHTML = `<div class="muted">No events yet.</div>`;
         return;
       }
+      const fmt = new Intl.DateTimeFormat(this._lang().startsWith("de") ? "de-DE" : "en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
       [...this._events].reverse().forEach((ev) => {
         const item = document.createElement("div");
         item.className = "item";
-        const ts = new Date((ev.ts || 0) * 1000).toLocaleString();
+        const ts = fmt.format(new Date((ev.ts || 0) * 1000));
         item.innerHTML = `<strong>[${ev.zone || "main"}] ${ev.event || "event"}</strong> • ${ts}<br/>${ev.message || ""}<br/><span class="muted">from=${ev.from_state || ""} to=${ev.to_state || ""} by=${ev.by || ev.actor || ""}</span>`;
         host.appendChild(item);
       });
