@@ -168,6 +168,12 @@ class HAPanelNGAlarm extends HTMLElement {
         .inline-test-result.ok { color: #1b8f3a; font-weight: 600; }
         .inline-test-result.err { color: #b00020; font-weight: 600; }
         .hint-inline { font-size: 0.82rem; color: var(--secondary-text-color); margin-top: -4px; }
+        .sensor-picker { margin-top: 4px; }
+        .sensor-picker + .hint-inline { margin-bottom: 6px; }
+        .sensor-btn-row { margin-top: 12px; }
+        .sensor-btn-top { display:flex; justify-content:center; gap:10px; }
+        .sensor-btn-top .btn { min-width: 170px; min-height: 40px; border-radius: 999px; }
+        .sensor-btn-delete { margin-top: 12px; display:flex; justify-content:flex-start; }
         .summary-with-handle {
           display:inline-flex;
           align-items:center;
@@ -441,6 +447,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
   _zoneModeOptions() {
     const opts = [];
+    const modeLabel = { away: "Away", home: "Home", night: "Night", vacation: "Vacation" };
     (this._data.modes || []).forEach((z) => {
       const zid = z.id || "";
       const zname = z.name || zid || "zone";
@@ -450,7 +457,7 @@ class HAPanelNGAlarm extends HTMLElement {
       armTypes.forEach((t) => {
         const tt = String(t || "").toLowerCase();
         if (!tt) return;
-        opts.push({ value: `${zid}:${tt}`, label: `${zname} > ${tt}` });
+        opts.push({ value: `${zid}:${tt}`, label: `${zname} (${modeLabel[tt] || tt})` });
       });
     });
     return opts;
@@ -832,8 +839,9 @@ class HAPanelNGAlarm extends HTMLElement {
         { select: { multiple: true, mode: "dropdown", options: modeOptions } },
         rule.modes || [],
         (v) => upd({ modes: v || [] }),
-        "Used in"
+        "Use Sensor in"
       );
+      usedIn.classList.add("sensor-picker");
       const usedInHint = document.createElement("div");
       usedInHint.className = "hint-inline";
       usedInHint.textContent = "Where this sensor is active.";
@@ -842,8 +850,9 @@ class HAPanelNGAlarm extends HTMLElement {
         { select: { multiple: true, mode: "dropdown", options: modeOptions } },
         rule.bypass_modes || [],
         (v) => upd({ bypass_modes: v || [] }),
-        "Bypassed in"
+        "Allow Bypass in"
       );
+      bypassedIn.classList.add("sensor-picker");
       const bypassedInHint = document.createElement("div");
       bypassedInHint.className = "hint-inline";
       bypassedInHint.textContent = "Ignored when zone bypass is active.";
@@ -852,8 +861,9 @@ class HAPanelNGAlarm extends HTMLElement {
         { select: { multiple: true, mode: "dropdown", options: globalBypassOptions } },
         rule.bypass_global_ids || [],
         (v) => upd({ bypass_global_ids: v || [] }),
-        "Global bypass"
+        "Select Bypass Rule"
       );
+      globalBypass.classList.add("sensor-picker");
       const globalBypassHint = document.createElement("div");
       globalBypassHint.className = "hint-inline";
       globalBypassHint.textContent = "Extra bypass conditions linked to this sensor.";
@@ -887,13 +897,14 @@ class HAPanelNGAlarm extends HTMLElement {
       copyBtn.type = "button";
       copyBtn.textContent = "Copy config";
       copyBtn.addEventListener("click", () => {
+        const current = (this._data.sensor_rules || [])[idx] || {};
         this._sensorConfigClipboard = {
-          modes: [...(rule.modes || [])],
-          bypass_modes: [...(rule.bypass_modes || [])],
-          bypass_global_ids: [...(rule.bypass_global_ids || [])],
-          allow_open_arm: !!rule.allow_open_arm,
-          trigger_on_open_only: !!rule.trigger_on_open_only,
-          trigger_unknown_unavailable: !!rule.trigger_unknown_unavailable,
+          modes: [...(current.modes || [])],
+          bypass_modes: [...(current.bypass_modes || [])],
+          bypass_global_ids: [...(current.bypass_global_ids || [])],
+          allow_open_arm: !!current.allow_open_arm,
+          trigger_on_open_only: !!current.trigger_on_open_only,
+          trigger_unknown_unavailable: !!current.trigger_unknown_unavailable,
         };
         this._status("Sensor config copied.", "ok");
       });
@@ -913,8 +924,14 @@ class HAPanelNGAlarm extends HTMLElement {
       });
 
       const btnRow = document.createElement("div");
-      btnRow.className = "action-btn-row";
-      btnRow.append(copyBtn, pasteBtn, del);
+      btnRow.className = "sensor-btn-row";
+      const btnTop = document.createElement("div");
+      btnTop.className = "sensor-btn-top";
+      btnTop.append(copyBtn, pasteBtn);
+      const btnDelete = document.createElement("div");
+      btnDelete.className = "sensor-btn-delete";
+      btnDelete.append(del);
+      btnRow.append(btnTop, btnDelete);
 
       details.appendChild(row);
       details.appendChild(btnRow);
