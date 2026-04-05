@@ -29,6 +29,8 @@ from .const import (
     CONF_USER_CAN_ARM,
     CONF_USER_CAN_DISARM,
     CONF_USER_CAN_PANIC,
+    CONF_USER_ARM_MODES,
+    CONF_USER_DISARM_MODES,
     CONF_USER_CODE,
     CONF_USER_NAME,
     DEFAULTS,
@@ -155,6 +157,16 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
         name = str(user.get(CONF_USER_NAME) or "").strip()
         if not code:
             continue
+        arm_modes = [
+            str(v).strip().lower().replace(" ", "_")
+            for v in user.get(CONF_USER_ARM_MODES, [])
+            if str(v).strip()
+        ]
+        disarm_modes = [
+            str(v).strip().lower().replace(" ", "_")
+            for v in user.get(CONF_USER_DISARM_MODES, [])
+            if str(v).strip()
+        ]
         users.append(
             {
                 CONF_USER_NAME: name or f"User {len(users) + 1}",
@@ -162,6 +174,8 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                 CONF_USER_CAN_ARM: bool(user.get(CONF_USER_CAN_ARM, True)),
                 CONF_USER_CAN_DISARM: bool(user.get(CONF_USER_CAN_DISARM, True)),
                 CONF_USER_CAN_PANIC: bool(user.get(CONF_USER_CAN_PANIC, False)),
+                CONF_USER_ARM_MODES: arm_modes,
+                CONF_USER_DISARM_MODES: disarm_modes,
             }
         )
     data[CONF_USERS] = users

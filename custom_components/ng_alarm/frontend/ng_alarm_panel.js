@@ -163,12 +163,11 @@ class HAPanelNGAlarm extends HTMLElement {
     form.hass = this._hass;
     form.data = this._data;
     form.schema = [
-      { name: "name", selector: { text: {} } },
       { name: "require_code_to_arm", selector: { boolean: {} } },
-      { name: "exit_delay_away", selector: { number: { min: 0, max: 600, step: 1, mode: "slider", unit_of_measurement: "s" } } },
-      { name: "entry_delay_away", selector: { number: { min: 0, max: 600, step: 1, mode: "slider", unit_of_measurement: "s" } } },
-      { name: "exit_delay_home", selector: { number: { min: 0, max: 600, step: 1, mode: "slider", unit_of_measurement: "s" } } },
-      { name: "entry_delay_home", selector: { number: { min: 0, max: 600, step: 1, mode: "slider", unit_of_measurement: "s" } } },
+      { name: "exit_delay_away", selector: { number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } } },
+      { name: "entry_delay_away", selector: { number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } } },
+      { name: "exit_delay_home", selector: { number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } } },
+      { name: "entry_delay_home", selector: { number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } } },
       {
         name: "bypass_mode",
         selector: {
@@ -182,19 +181,16 @@ class HAPanelNGAlarm extends HTMLElement {
         },
       },
       { name: "bypass_entities", selector: { entity: { multiple: true } } },
-      { name: "bypass_state", selector: { text: {} } },
       { name: "bypass_template", selector: { template: {} } },
     ];
     form.computeLabel = (item) => ({
-      name: "Name",
       require_code_to_arm: "Code required for arming",
       exit_delay_away: "Exit delay away",
       entry_delay_away: "Entry delay away",
       exit_delay_home: "Exit delay home",
       entry_delay_home: "Entry delay home",
       bypass_mode: "Global bypass mode (fallback)",
-      bypass_entities: "Global bypass entities",
-      bypass_state: "Global bypass state",
+      bypass_entities: "Global bypass entities (true = bypass)",
       bypass_template: "Global bypass template",
     }[item.name] || item.name);
     form.addEventListener("value-changed", (ev) => {
@@ -210,7 +206,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("modes-add").addEventListener("click", () => {
       const modes = [...(this._data.modes || [])];
-      modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", bypass_mode: "none", bypass_entities: [], bypass_state: "on", bypass_template: "" });
+      modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", bypass_mode: "none", bypass_entities: [], bypass_template: "" });
       this._data.modes = modes;
       this._renderModes();
     });
@@ -224,7 +220,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("users-add").addEventListener("click", () => {
       const users = [...(this._data.users || [])];
-      users.push({ name: "", code: "", can_arm: true, can_disarm: true, can_panic: false });
+      users.push({ name: "", code: "", can_arm: true, can_disarm: true, can_panic: false, arm_modes: [], disarm_modes: [] });
       this._data.users = users;
       this._renderUsers();
     });
@@ -303,8 +299,7 @@ class HAPanelNGAlarm extends HTMLElement {
       const by = mode.bypass_mode || "none";
       if (by === "entity_state") {
         row.append(
-          this._sel({ entity: { multiple: true } }, mode.bypass_entities || [], (v) => upd({ bypass_entities: v || [] }), "Bypass entities"),
-          this._sel({ text: {} }, mode.bypass_state || "on", (v) => upd({ bypass_state: v }), "Bypass state"),
+          this._sel({ entity: { multiple: true } }, mode.bypass_entities || [], (v) => upd({ bypass_entities: v || [] }), "Bypass entities (true = bypass)"),
         );
       }
       if (by === "template") {
@@ -399,11 +394,14 @@ class HAPanelNGAlarm extends HTMLElement {
         this._data.users = users;
       };
 
+      const modeOptions = this._modeOptions();
       row.append(
         this._sel({ text: {} }, u.name || "", (v) => upd({ name: v }), "Name"),
         this._sel({ text: { type: "password" } }, u.code || "", (v) => upd({ code: v }), "Code"),
         this._sel({ boolean: {} }, !!u.can_arm, (v) => upd({ can_arm: !!v }), "Can arm"),
+        this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.arm_modes || [], (v) => upd({ arm_modes: v || [] }), "Arm modes"),
         this._sel({ boolean: {} }, !!u.can_disarm, (v) => upd({ can_disarm: !!v }), "Can disarm"),
+        this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.disarm_modes || [], (v) => upd({ disarm_modes: v || [] }), "Disarm modes"),
         this._sel({ boolean: {} }, !!u.can_panic, (v) => upd({ can_panic: !!v }), "Is panic code"),
       );
 

@@ -60,6 +60,8 @@ from .const import (
     CONF_USER_CAN_ARM,
     CONF_USER_CAN_DISARM,
     CONF_USER_CAN_PANIC,
+    CONF_USER_ARM_MODES,
+    CONF_USER_DISARM_MODES,
     CONF_USER_CODE,
     CONF_USER_NAME,
     DOMAIN,
@@ -242,13 +244,17 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 return _normalize_mode_id(mode.get("id"))
         return _normalize_mode_id(modes[0].get("id"))
 
-    def _authorize_arm(self, code: str | None) -> str | None:
+    def _authorize_arm(self, code: str | None, mode_id: str) -> str | None:
         require_code = bool(self._config.get(CONF_REQUIRE_CODE_TO_ARM, True))
+        mode_id = _normalize_mode_id(mode_id)
         if self._with_users():
             if not require_code and not str(code or "").strip():
                 return UNKNOWN
             user = self._resolve_user_from_code(code)
             if not user or not bool(user.get(CONF_USER_CAN_ARM, False)):
+                return None
+            allowed = [_normalize_mode_id(v) for v in user.get(CONF_USER_ARM_MODES, [])]
+            if allowed and mode_id not in allowed:
                 return None
             return self._actor_name(user)
 
@@ -377,10 +383,9 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                     _LOGGER.debug("Bypass template render failed: %s", err)
                     return False
 
-            bypass_state = str(mode.get("bypass_state", "")).strip()
             for entity_id in mode.get("bypass_entities", []) or []:
                 state = self.hass.states.get(entity_id)
-                if state and state.state == bypass_state:
+                if state and str(state.state).lower() in {"on", "true", "1", "home", "open"}:
                     return True
             return False
 
@@ -395,12 +400,9 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 _LOGGER.debug("Bypass template render failed: %s", err)
                 return False
 
-        bypass_state = str(self._config.get(CONF_BYPASS_STATE, ""))
-        if not bypass_state:
-            return False
         for entity_id in self._config.get(CONF_BYPASS_ENTITIES, []):
             state = self.hass.states.get(entity_id)
-            if state and state.state == bypass_state:
+            if state and str(state.state).lower() in {"on", "true", "1", "home", "open"}:
                 return True
         return False
 
@@ -566,12 +568,12 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         return str(given or "") == str(expected or "")
 
     async def async_alarm_arm_away(self, code=None) -> None:
-        actor = self._authorize_arm(code)
+        self._current_mode_id = self._resolve_mode_for_arm("away")
+        actor = self._authorize_arm(code, self._current_mode_id)
         if actor is None:
-            await self._async_log_event("denied", "Denied arm away: code/permission mismatch")
+            await self._async_log_event("denied", "Denied arm away: code/permission/mode mismatch")
             return
         self._last_actor = actor
-        self._current_mode_id = self._resolve_mode_for_arm("away")
         if self._current_mode_id == UNKNOWN:
             await self._async_log_event("denied", "Denied arm away: no modes configured")
             return
@@ -580,12 +582,12 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         )
 
     async def async_alarm_arm_home(self, code=None) -> None:
-        actor = self._authorize_arm(code)
+        self._current_mode_id = self._resolve_mode_for_arm("home")
+        actor = self._authorize_arm(code, self._current_mode_id)
         if actor is None:
-            await self._async_log_event("denied", "Denied arm home: code/permission mismatch")
+            await self._async_log_event("denied", "Denied arm home: code/permission/mode mismatch")
             return
         self._last_actor = actor
-        self._current_mode_id = self._resolve_mode_for_arm("home")
         if self._current_mode_id == UNKNOWN:
             await self._async_log_event("denied", "Denied arm home: no modes configured")
             return
@@ -650,6 +652,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             actor = self._actor_name(user)
             if not bool(user.get(CONF_USER_CAN_DISARM, False)):
                 await self._async_log_event("denied", "Denied disarm: missing disarm permission")
+                return
+            allowed = [_normalize_mode_id(v) for v in user.get(CONF_USER_DISARM_MODES, [])]
+            if allowed and self._current_mode_id not in allowed and self._current_mode_id != UNKNOWN:
+                await self._async_log_event("denied", "Denied disarm: mode not allowed for user")
                 return
             panic = bool(user.get(CONF_USER_CAN_PANIC, False)) and bool(
                 str(code or "").strip()
