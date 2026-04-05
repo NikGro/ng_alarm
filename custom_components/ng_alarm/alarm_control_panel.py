@@ -145,7 +145,7 @@ async def async_setup_entry(
 class NGAlarmControlPanel(AlarmControlPanelEntity):
     """NG Alarm control panel implementation."""
 
-    _attr_code_format = CodeFormat.TEXT
+    _attr_code_format = CodeFormat.NUMBER
     _attr_code_arm_required = False
 
     def __init__(self, hass: HomeAssistant, config: dict[str, Any], zone_id: str | None = None) -> None:
@@ -338,7 +338,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     @property
     def code_arm_required(self) -> bool:
-        # Per-zone/per-arm-type enforcement is handled in backend authorization.
+        # Keep code field optional in UI; backend enforces per-zone/per-arm-type requirement.
         return False
 
     def _resolve_mode_for_arm(self, target: str) -> str:
