@@ -119,13 +119,19 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
         actions.append(
             {
                 CONF_ACTION_FROM: [
-                    str(v).strip() for v in action.get(CONF_ACTION_FROM, []) if str(v).strip()
+                    str(v).strip().lower()
+                    for v in action.get(CONF_ACTION_FROM, [])
+                    if str(v).strip()
                 ],
                 CONF_ACTION_TO: [
-                    str(v).strip() for v in action.get(CONF_ACTION_TO, []) if str(v).strip()
+                    str(v).strip().lower()
+                    for v in action.get(CONF_ACTION_TO, [])
+                    if str(v).strip()
                 ],
                 CONF_ACTION_THROUGH: [
-                    str(v).strip() for v in action.get(CONF_ACTION_THROUGH, []) if str(v).strip()
+                    str(v).strip().lower()
+                    for v in action.get(CONF_ACTION_THROUGH, [])
+                    if str(v).strip()
                 ],
                 CONF_ACTION_SCRIPTS: scripts,
             }

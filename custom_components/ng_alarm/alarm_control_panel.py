@@ -227,10 +227,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
     def _action_matches(self, filters: list[str], value: str) -> bool:
         if not filters:
             return True
-        normalized = {str(v).strip() for v in filters if str(v).strip()}
+        normalized = {str(v).strip().lower() for v in filters if str(v).strip()}
         if not normalized:
             return True
-        return "any" in normalized or value in normalized
+        return "any" in normalized or str(value).strip().lower() in normalized
 
     async def _async_run_transition_actions(
         self,

@@ -7,6 +7,21 @@ class HAPanelNGAlarm extends HTMLElement {
     this._data = {};
     this._events = [];
     this._activeTab = "general";
+    this._alarmStateOptions = [
+      { value: "any", label: "Any" },
+      { value: "disarmed", label: "Disarmed" },
+      { value: "arming", label: "Arming" },
+      { value: "armed_home", label: "Armed Home" },
+      { value: "armed_away", label: "Armed Away" },
+      { value: "pending", label: "Pending" },
+      { value: "triggered", label: "Triggered" },
+    ];
+    this._throughStateOptions = [
+      { value: "any", label: "Any" },
+      { value: "unknown", label: "Unknown" },
+      { value: "armed_home", label: "Armed Home" },
+      { value: "armed_away", label: "Armed Away" },
+    ];
 
     this._labels = {
       name: "Name",
@@ -75,11 +90,13 @@ class HAPanelNGAlarm extends HTMLElement {
 
         ha-card { padding: 14px; margin-bottom: 12px; }
         .grid { display: grid; gap: 10px; }
-        .row { display:grid; grid-template-columns: 1.2fr 1fr auto auto auto auto; gap:8px; align-items:center; margin-bottom:8px; }
-        .row.actions { grid-template-columns: 1fr 1fr 1fr 1.5fr auto; }
-        .row input { width:100%; box-sizing:border-box; padding:8px; border-radius:8px; border:1px solid var(--divider-color); background: var(--card-background-color); color:var(--primary-text-color); }
-        .checks { display:flex; gap:8px; font-size:0.9rem; }
-        .pill { border: 1px solid var(--divider-color); border-radius: 8px; padding: 6px 10px; }
+        .row { display:grid; grid-template-columns: minmax(180px, 1fr) minmax(140px, 1fr) auto auto auto auto; gap:8px; align-items:center; margin-bottom:8px; }
+        .row.actions { grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr) minmax(170px, 1fr) minmax(240px, 1.5fr) auto; }
+        .item-card { border: 1px solid var(--divider-color); border-radius: 12px; padding: 10px; background: var(--secondary-background-color, var(--card-background-color)); }
+        .item-title { font-size: 0.85rem; color: var(--secondary-text-color); margin: 0 0 8px 2px; }
+        .toggle-wrap { display: flex; align-items: center; justify-content: center; }
+        .toggle-pill { border: 1px solid var(--divider-color); border-radius: 999px; padding: 8px 10px; background: var(--card-background-color); min-width: 84px; text-align: center; }
+        .full-width { width: 100%; }
         .btn { border:1px solid var(--divider-color); border-radius:10px; background: var(--card-background-color); color: var(--primary-text-color); padding: 8px 12px; cursor:pointer; }
         .btn.danger { border-color: #b00020; color:#b00020; }
         .btn.primary { border:none; background: var(--primary-color); color:white; font-weight:600; }
@@ -217,12 +234,14 @@ class HAPanelNGAlarm extends HTMLElement {
       form.computeLabel = (item) => this._labels[item.name] || item.name;
       form.addEventListener("value-changed", (ev) => {
         this._data = { ...this._data, ...ev.detail.value };
+        this._refreshBypassModeFields();
       });
     };
 
     mkForm("form-general", this._schemaGeneral());
     mkForm("form-sensors", this._schemaSensors());
     mkForm("form-actions-legacy", this._schemaLegacyActions());
+    this._refreshBypassModeFields();
   }
 
   _refreshForms() {
@@ -230,8 +249,42 @@ class HAPanelNGAlarm extends HTMLElement {
       form.data = this._data;
       form.hass = this._hass;
     });
+    this._refreshBypassModeFields();
     this._renderUsers();
     this._renderActions();
+  }
+
+  _refreshBypassModeFields() {
+    const mode = this._data.bypass_mode || "entity_state";
+    const showTemplate = mode === "template";
+    const shouldShow = (name) => {
+      if (name === "bypass_template") return showTemplate;
+      if (name === "bypass_entities" || name === "bypass_state") return !showTemplate;
+      return true;
+    };
+
+    this.shadowRoot.querySelectorAll("#form-general [data-path]").forEach((row) => {
+      const path = row.getAttribute("data-path");
+      row.style.display = shouldShow(path) ? "" : "none";
+    });
+  }
+
+  _createSelector(selector, value, onValueChanged, label = "") {
+    const wrap = document.createElement("div");
+    wrap.className = "full-width";
+    const sel = document.createElement("ha-selector");
+    sel.hass = this._hass;
+    sel.selector = selector;
+    sel.value = value;
+    if (label) {
+      sel.label = label;
+    }
+    sel.addEventListener("value-changed", (ev) => {
+      sel.value = ev.detail.value;
+      onValueChanged(ev.detail.value);
+    });
+    wrap.appendChild(sel);
+    return wrap;
   }
 
   _bindEvents() {
@@ -281,32 +334,62 @@ class HAPanelNGAlarm extends HTMLElement {
 
     users.forEach((u, idx) => {
       const row = document.createElement("div");
-      row.className = "row";
-      row.innerHTML = `
-        <input data-key="name" value="${(u.name || "").replaceAll('"', '&quot;')}" placeholder="Name" />
-        <input data-key="code" type="password" value="${(u.code || "").replaceAll('"', '&quot;')}" placeholder="Code" />
-        <label class="pill"><input data-key="can_arm" type="checkbox" ${u.can_arm ? "checked" : ""} /> Arm</label>
-        <label class="pill"><input data-key="can_disarm" type="checkbox" ${u.can_disarm ? "checked" : ""} /> Disarm</label>
-        <label class="pill"><input data-key="can_panic" type="checkbox" ${u.can_panic ? "checked" : ""} /> Panic</label>
-        <button class="btn danger" data-del="1" type="button">✕</button>
-      `;
+      row.className = "row item-card";
 
-      row.querySelectorAll("input[data-key]").forEach((inp) => {
-        inp.addEventListener("input", () => {
-          const key = inp.dataset.key;
-          const usersNow = [...(this._data.users || [])];
-          usersNow[idx] = { ...usersNow[idx], [key]: inp.type === "checkbox" ? inp.checked : inp.value };
-          this._data.users = usersNow;
-        });
+      const update = (patch) => {
+        const usersNow = [...(this._data.users || [])];
+        usersNow[idx] = { ...usersNow[idx], ...patch };
+        this._data.users = usersNow;
+      };
+
+      const nameSelector = this._createSelector(
+        { text: {} },
+        u.name || "",
+        (value) => update({ name: value }),
+        "Name"
+      );
+      const codeSelector = this._createSelector(
+        { text: { type: "password" } },
+        u.code || "",
+        (value) => update({ code: value }),
+        "Code"
+      );
+      const canArmSelector = this._createSelector(
+        { boolean: {} },
+        !!u.can_arm,
+        (value) => update({ can_arm: !!value }),
+        "Arm"
+      );
+      const canDisarmSelector = this._createSelector(
+        { boolean: {} },
+        !!u.can_disarm,
+        (value) => update({ can_disarm: !!value }),
+        "Disarm"
+      );
+      const canPanicSelector = this._createSelector(
+        { boolean: {} },
+        !!u.can_panic,
+        (value) => update({ can_panic: !!value }),
+        "Panic"
+      );
+
+      [canArmSelector, canDisarmSelector, canPanicSelector].forEach((el) => {
+        el.classList.add("toggle-wrap");
       });
 
-      row.querySelector("button[data-del]").addEventListener("click", () => {
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn danger";
+      delBtn.type = "button";
+      delBtn.textContent = "✕";
+
+      delBtn.addEventListener("click", () => {
         const usersNow = [...(this._data.users || [])];
         usersNow.splice(idx, 1);
         this._data.users = usersNow;
         this._renderUsers();
       });
 
+      row.append(nameSelector, codeSelector, canArmSelector, canDisarmSelector, canPanicSelector, delBtn);
       host.appendChild(row);
     });
   }
@@ -319,48 +402,50 @@ class HAPanelNGAlarm extends HTMLElement {
     const actions = this._data.actions || [];
     actions.forEach((action, idx) => {
       const row = document.createElement("div");
-      row.className = "row actions";
-
-      const fromInput = document.createElement("input");
-      fromInput.placeholder = "from (comma-separated, e.g. armed_home,pending or any)";
-      fromInput.value = (action.from || []).join(",");
-
-      const toInput = document.createElement("input");
-      toInput.placeholder = "to (comma-separated)";
-      toInput.value = (action.to || []).join(",");
-
-      const throughInput = document.createElement("input");
-      throughInput.placeholder = "through mode (armed_home, armed_away, any)";
-      throughInput.value = (action.through || []).join(",");
-
-      const selector = document.createElement("ha-selector");
-      selector.hass = this._hass;
-      selector.selector = { entity: { multiple: true, filter: { domain: "script" } } };
-      selector.value = action.scripts || [];
+      row.className = "row actions item-card";
 
       const delBtn = document.createElement("button");
       delBtn.className = "btn danger";
       delBtn.type = "button";
       delBtn.textContent = "✕";
 
-      const update = () => {
+      const update = (patch) => {
         const actionsNow = [...(this._data.actions || [])];
         actionsNow[idx] = {
-          from: fromInput.value.split(",").map((s) => s.trim()).filter(Boolean),
-          to: toInput.value.split(",").map((s) => s.trim()).filter(Boolean),
-          through: throughInput.value.split(",").map((s) => s.trim()).filter(Boolean),
-          scripts: selector.value || [],
+          from: action.from || [],
+          to: action.to || [],
+          through: action.through || [],
+          scripts: action.scripts || [],
+          ...patch,
         };
         this._data.actions = actionsNow;
+        action = actionsNow[idx];
       };
 
-      fromInput.addEventListener("input", update);
-      toInput.addEventListener("input", update);
-      throughInput.addEventListener("input", update);
-      selector.addEventListener("value-changed", (ev) => {
-        selector.value = ev.detail.value;
-        update();
-      });
+      const fromSelector = this._createSelector(
+        { select: { multiple: true, mode: "list", options: this._alarmStateOptions } },
+        action.from || [],
+        (value) => update({ from: value || [] }),
+        "From states"
+      );
+      const toSelector = this._createSelector(
+        { select: { multiple: true, mode: "list", options: this._alarmStateOptions } },
+        action.to || [],
+        (value) => update({ to: value || [] }),
+        "To states"
+      );
+      const throughSelector = this._createSelector(
+        { select: { multiple: true, mode: "list", options: this._throughStateOptions } },
+        action.through || [],
+        (value) => update({ through: value || [] }),
+        "Through mode"
+      );
+      const scriptSelector = this._createSelector(
+        { entity: { multiple: true, filter: { domain: "script" } } },
+        action.scripts || [],
+        (value) => update({ scripts: value || [] }),
+        "Scripts"
+      );
 
       delBtn.addEventListener("click", () => {
         const actionsNow = [...(this._data.actions || [])];
@@ -369,7 +454,7 @@ class HAPanelNGAlarm extends HTMLElement {
         this._renderActions();
       });
 
-      row.append(fromInput, toInput, throughInput, selector, delBtn);
+      row.append(fromSelector, toSelector, throughSelector, scriptSelector, delBtn);
       host.appendChild(row);
     });
   }
