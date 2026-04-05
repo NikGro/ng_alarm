@@ -22,8 +22,9 @@ API_EVENTS_CLEAR = "/api/ng_alarm/events/clear"
 UNKNOWN = "unknown"
 
 CONF_NAME = "name"
-CONF_ALARM_CODE = "alarm_code"
-CONF_PANIC_CODE = "panic_code"
+CONF_REQUIRE_CODE_TO_ARM = "require_code_to_arm"
+CONF_MODES = "modes"
+CONF_SENSOR_RULES = "sensor_rules"
 CONF_EXIT_DELAY_AWAY = "exit_delay_away"
 CONF_ENTRY_DELAY_AWAY = "entry_delay_away"
 CONF_EXIT_DELAY_HOME = "exit_delay_home"
@@ -58,6 +59,7 @@ CONF_USER_CAN_PANIC = "can_panic"
 CONF_ACTION_FROM = "from"
 CONF_ACTION_TO = "to"
 CONF_ACTION_THROUGH = "through"
+CONF_ACTION_BY_USER = "by_user"
 CONF_ACTION_SCRIPTS = "scripts"
 
 BYPASS_MODE_ENTITY_STATE = "entity_state"
@@ -71,8 +73,9 @@ ATTR_ACTOR = "actor"
 
 DEFAULTS: dict = {
     CONF_NAME: "NG Alarm",
-    CONF_ALARM_CODE: "",
-    CONF_PANIC_CODE: "",
+    CONF_REQUIRE_CODE_TO_ARM: True,
+    CONF_MODES: [],
+    CONF_SENSOR_RULES: [],
     CONF_EXIT_DELAY_AWAY: 60,
     CONF_ENTRY_DELAY_AWAY: 30,
     CONF_EXIT_DELAY_HOME: 30,

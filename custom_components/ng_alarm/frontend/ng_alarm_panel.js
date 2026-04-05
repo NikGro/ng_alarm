@@ -7,49 +7,6 @@ class HAPanelNGAlarm extends HTMLElement {
     this._data = {};
     this._events = [];
     this._activeTab = "general";
-    this._alarmStateOptions = [
-      { value: "any", label: "Any" },
-      { value: "disarmed", label: "Disarmed" },
-      { value: "arming", label: "Arming" },
-      { value: "armed_home", label: "Armed Home" },
-      { value: "armed_away", label: "Armed Away" },
-      { value: "pending", label: "Pending" },
-      { value: "triggered", label: "Triggered" },
-    ];
-    this._throughStateOptions = [
-      { value: "any", label: "Any" },
-      { value: "unknown", label: "Unknown" },
-      { value: "armed_home", label: "Armed Home" },
-      { value: "armed_away", label: "Armed Away" },
-    ];
-
-    this._labels = {
-      name: "Name",
-      alarm_code: "Master Alarm Code (legacy)",
-      panic_code: "Master Panic Code (legacy)",
-      exit_delay_away: "Exit Delay Away",
-      entry_delay_away: "Entry Delay Away",
-      exit_delay_home: "Exit Delay Home",
-      entry_delay_home: "Entry Delay Home",
-      bypass_mode: "Bypass Mode",
-      bypass_state: "Bypass Entity State",
-      bypass_template: "Bypass Template",
-      away_active_sensors: "Away Active Sensors",
-      away_bypass_sensors: "Away Bypass Sensors",
-      home_active_sensors: "Home Active Sensors",
-      home_bypass_sensors: "Home Bypass Sensors",
-      bypass_entities: "Bypass Entities",
-      away_trigger_states: "Away Trigger States",
-      home_trigger_states: "Home Trigger States",
-      ignore_unknown_states: "Ignore unknown states",
-      ignore_unavailable_states: "Ignore unavailable states",
-      pending_scripts: "Pending Scripts",
-      triggered_scripts: "Triggered Scripts",
-      armed_away_scripts: "Armed Away Scripts",
-      armed_home_scripts: "Armed Home Scripts",
-      disarmed_scripts: "Disarmed Scripts",
-      panic_scripts: "Panic Scripts",
-    };
   }
 
   set hass(hass) {
@@ -75,34 +32,56 @@ class HAPanelNGAlarm extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>
         :host { display:block; height:100%; box-sizing:border-box; }
-        .wrap { padding: 16px; max-width: 1180px; margin: 0 auto; color: var(--primary-text-color); }
-        .head { display:flex; align-items:center; gap:12px; margin-bottom: 14px; }
-        .logo { width:44px; height:44px; border-radius:10px; object-fit:cover; border:1px solid var(--divider-color); }
-        h1 { margin:0; font-size: 28px; }
+        .wrap { padding: 12px; max-width: 980px; margin: 0 auto; color: var(--primary-text-color); }
+        .head { display:flex; align-items:center; gap:10px; margin-bottom: 12px; }
+        .logo { width:40px; height:40px; border-radius:10px; object-fit:cover; border:1px solid var(--divider-color); }
+        h1 { margin:0; font-size: 24px; }
         .muted { color: var(--secondary-text-color); font-size: 0.9rem; }
 
-        .tabs { display:flex; flex-wrap:wrap; gap:8px; margin: 16px 0; }
-        .tab { border:1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); border-radius: 10px; padding: 8px 12px; cursor:pointer; }
+        .tabs { display:flex; flex-wrap:wrap; gap:8px; margin: 12px 0; }
+        .tab {
+          border:1px solid var(--divider-color);
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          border-radius: 10px;
+          padding: 8px 11px;
+          cursor:pointer;
+        }
         .tab.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
 
         .section { display:none; }
         .section.active { display:block; }
 
-        ha-card { padding: 14px; margin-bottom: 12px; }
-        .grid { display: grid; gap: 10px; }
-        .row { display:grid; grid-template-columns: minmax(180px, 1fr) minmax(140px, 1fr) auto auto auto auto; gap:8px; align-items:center; margin-bottom:8px; }
-        .row.actions { grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr) minmax(170px, 1fr) minmax(240px, 1.5fr) auto; }
-        .item-card { border: 1px solid var(--divider-color); border-radius: 12px; padding: 10px; background: var(--secondary-background-color, var(--card-background-color)); }
-        .item-title { font-size: 0.85rem; color: var(--secondary-text-color); margin: 0 0 8px 2px; }
-        .toggle-wrap { display: flex; align-items: center; justify-content: center; }
-        .toggle-pill { border: 1px solid var(--divider-color); border-radius: 999px; padding: 8px 10px; background: var(--card-background-color); min-width: 84px; text-align: center; }
-        .full-width { width: 100%; }
-        .btn { border:1px solid var(--divider-color); border-radius:10px; background: var(--card-background-color); color: var(--primary-text-color); padding: 8px 12px; cursor:pointer; }
-        .btn.danger { border-color: #b00020; color:#b00020; }
+        ha-card { padding: 12px; margin-bottom: 12px; }
+
+        .list { display:grid; gap:10px; }
+        .item {
+          border:1px solid var(--divider-color);
+          border-radius: 12px;
+          padding:10px;
+          background: var(--secondary-background-color, var(--card-background-color));
+        }
+        details > summary { cursor:pointer; font-weight:600; }
+        .row { display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px; }
+
+        .btn {
+          border:1px solid var(--divider-color);
+          border-radius:10px;
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          padding: 8px 12px;
+          cursor:pointer;
+        }
         .btn.primary { border:none; background: var(--primary-color); color:white; font-weight:600; }
-        .event { border:1px solid var(--divider-color); border-radius:8px; padding:8px 10px; margin-bottom:8px; }
+        .btn.danger { border-color:#b00020; color:#b00020; }
 
         .footer { display:flex; align-items:center; gap:10px; margin-top: 10px; }
+
+        @media (max-width: 800px) {
+          .wrap { max-width: 100%; padding: 10px; }
+          .row { grid-template-columns: 1fr; }
+          .tabs .tab { flex: 1 1 auto; min-width: 42%; }
+        }
       </style>
 
       <div class="wrap">
@@ -110,40 +89,52 @@ class HAPanelNGAlarm extends HTMLElement {
           <img class="logo" src="/ng_alarm_static/alarm_icon.jpg" alt="Alarm Icon" />
           <div>
             <h1>Alarm</h1>
-            <div class="muted">Native Home Assistant style configuration</div>
+            <div class="muted">Konfiguration ohne Legacy-Master-Codes</div>
           </div>
         </div>
 
         <div class="tabs">
           <button class="tab" data-tab="general">⚙️ General</button>
+          <button class="tab" data-tab="modes">🧩 Modes</button>
           <button class="tab" data-tab="sensors">🧲 Sensors</button>
-          <button class="tab" data-tab="users">👤 Users & Codes</button>
-          <button class="tab" data-tab="actions">🎬 Action Builder</button>
-          <button class="tab" data-tab="events">📜 Event Log</button>
+          <button class="tab" data-tab="users">👤 Users</button>
+          <button class="tab" data-tab="actions">🎬 Actions</button>
+          <button class="tab" data-tab="events">📜 Events</button>
         </div>
 
         <div id="general" class="section">
-          <ha-card header="General Settings"><ha-form id="form-general"></ha-form></ha-card>
+          <ha-card header="General Settings">
+            <ha-form id="form-general"></ha-form>
+          </ha-card>
+        </div>
+
+        <div id="modes" class="section">
+          <ha-card header="Modes">
+            <div class="muted">Eigene Modes statt Legacy Default Modes</div>
+            <div id="modes-list" class="list" style="margin-top:10px"></div>
+            <button id="modes-add" class="btn" type="button">+ Add mode</button>
+          </ha-card>
         </div>
 
         <div id="sensors" class="section">
-          <ha-card header="Sensor Configuration"><ha-form id="form-sensors"></ha-form></ha-card>
-          <ha-card header="Legacy State Actions"><ha-form id="form-actions-legacy"></ha-form></ha-card>
+          <ha-card header="Sensor Rules">
+            <div class="muted">Pro Sensor Modes, Bypass und Trigger-Flags</div>
+            <div id="sensors-list" class="list" style="margin-top:10px"></div>
+            <button id="sensors-add" class="btn" type="button">+ Add sensor rule</button>
+          </ha-card>
         </div>
 
         <div id="users" class="section">
-          <ha-card header="Users & Permissions">
-            <div class="muted">Codes with permissions for arm/disarm/panic.</div>
-            <div id="users-list" class="grid" style="margin-top:10px"></div>
+          <ha-card header="Users & Codes">
+            <div id="users-list" class="list"></div>
             <button id="users-add" class="btn" type="button">+ Add user</button>
           </ha-card>
         </div>
 
         <div id="actions" class="section">
-          <ha-card header="Action Rules">
-            <div class="muted">from/to/through filters + script targets</div>
-            <div id="actions-list" class="grid" style="margin-top:10px"></div>
-            <button id="actions-add" class="btn" type="button">+ Add action rule</button>
+          <ha-card header="Action Builder">
+            <div id="actions-list" class="list"></div>
+            <button id="actions-add" class="btn" type="button">+ Add action</button>
           </ha-card>
         </div>
 
@@ -164,15 +155,16 @@ class HAPanelNGAlarm extends HTMLElement {
       </div>
     `;
 
-    this._setupForms();
+    this._setupGeneralForm();
   }
 
-  _schemaGeneral() {
-    const mode = this._data.bypass_mode || "entity_state";
-    const schema = [
+  _setupGeneralForm() {
+    const form = this.shadowRoot.getElementById("form-general");
+    form.hass = this._hass;
+    form.data = this._data;
+    form.schema = [
       { name: "name", selector: { text: {} } },
-      { name: "alarm_code", selector: { text: { type: "password" } } },
-      { name: "panic_code", selector: { text: { type: "password" } } },
+      { name: "require_code_to_arm", selector: { boolean: {} } },
       { name: "exit_delay_away", selector: { number: { min: 0, max: 600, step: 1, mode: "slider", unit_of_measurement: "s" } } },
       { name: "entry_delay_away", selector: { number: { min: 0, max: 600, step: 1, mode: "slider", unit_of_measurement: "s" } } },
       { name: "exit_delay_home", selector: { number: { min: 0, max: 600, step: 1, mode: "slider", unit_of_measurement: "s" } } },
@@ -181,117 +173,53 @@ class HAPanelNGAlarm extends HTMLElement {
         name: "bypass_mode",
         selector: {
           select: {
+            mode: "dropdown",
             options: [
               { value: "entity_state", label: "Entity state" },
               { value: "template", label: "Template" },
             ],
-            mode: "dropdown",
           },
         },
       },
+      { name: "bypass_entities", selector: { entity: { multiple: true } } },
+      { name: "bypass_state", selector: { text: {} } },
+      { name: "bypass_template", selector: { template: {} } },
     ];
-
-    if (mode === "template") {
-      schema.push({ name: "bypass_template", selector: { template: {} } });
-    } else {
-      schema.push({ name: "bypass_entities", selector: { entity: { multiple: true } } });
-      schema.push({ name: "bypass_state", selector: { text: {} } });
-    }
-
-    return schema;
-  }
-
-  _schemaSensors() {
-    const triggerOptions = ["on", "open", "motion", "detected", "unknown", "unavailable"];
-    return [
-      { name: "away_active_sensors", selector: { entity: { multiple: true, filter: { domain: "binary_sensor" } } } },
-      { name: "away_bypass_sensors", selector: { entity: { multiple: true, filter: { domain: "binary_sensor" } } } },
-      { name: "home_active_sensors", selector: { entity: { multiple: true, filter: { domain: "binary_sensor" } } } },
-      { name: "home_bypass_sensors", selector: { entity: { multiple: true, filter: { domain: "binary_sensor" } } } },
-      {
-        name: "away_trigger_states",
-        selector: { select: { multiple: true, mode: "list", options: triggerOptions.map((v) => ({ value: v, label: v })) } },
-      },
-      {
-        name: "home_trigger_states",
-        selector: { select: { multiple: true, mode: "list", options: triggerOptions.map((v) => ({ value: v, label: v })) } },
-      },
-      { name: "ignore_unknown_states", selector: { boolean: {} } },
-      { name: "ignore_unavailable_states", selector: { boolean: {} } },
-    ];
-  }
-
-  _schemaLegacyActions() {
-    return [
-      { name: "pending_scripts", selector: { entity: { multiple: true, filter: { domain: "script" } } } },
-      { name: "triggered_scripts", selector: { entity: { multiple: true, filter: { domain: "script" } } } },
-      { name: "armed_away_scripts", selector: { entity: { multiple: true, filter: { domain: "script" } } } },
-      { name: "armed_home_scripts", selector: { entity: { multiple: true, filter: { domain: "script" } } } },
-      { name: "disarmed_scripts", selector: { entity: { multiple: true, filter: { domain: "script" } } } },
-      { name: "panic_scripts", selector: { entity: { multiple: true, filter: { domain: "script" } } } },
-    ];
-  }
-
-  _setupForms() {
-    const mkForm = (id, schema) => {
-      const form = this.shadowRoot.getElementById(id);
-      form.hass = this._hass;
-      form.data = this._data;
-      form.schema = schema;
-      form.computeLabel = (item) => this._labels[item.name] || item.name;
-      form.addEventListener("value-changed", (ev) => {
-        this._data = { ...this._data, ...ev.detail.value };
-        this._refreshBypassModeFields();
-      });
-    };
-
-    mkForm("form-general", this._schemaGeneral());
-    mkForm("form-sensors", this._schemaSensors());
-    mkForm("form-actions-legacy", this._schemaLegacyActions());
-    this._refreshBypassModeFields();
-  }
-
-  _refreshForms() {
-    this.shadowRoot.querySelectorAll("ha-form").forEach((form) => {
-      form.data = this._data;
-      form.hass = this._hass;
+    form.computeLabel = (item) => ({
+      name: "Name",
+      require_code_to_arm: "Code required for arming",
+      exit_delay_away: "Exit delay away",
+      entry_delay_away: "Entry delay away",
+      exit_delay_home: "Exit delay home",
+      entry_delay_home: "Entry delay home",
+      bypass_mode: "Global bypass mode (fallback)",
+      bypass_entities: "Global bypass entities",
+      bypass_state: "Global bypass state",
+      bypass_template: "Global bypass template",
+    }[item.name] || item.name);
+    form.addEventListener("value-changed", (ev) => {
+      this._data = { ...this._data, ...ev.detail.value };
     });
-    this._refreshBypassModeFields();
-    this._renderUsers();
-    this._renderActions();
-  }
-
-  _refreshBypassModeFields() {
-    const form = this.shadowRoot.getElementById("form-general");
-    if (!form) return;
-    form.schema = this._schemaGeneral();
-    form.data = this._data;
-    form.hass = this._hass;
-  }
-
-  _createSelector(selector, value, onValueChanged, label = "") {
-    const wrap = document.createElement("div");
-    wrap.className = "full-width";
-    const sel = document.createElement("ha-selector");
-    sel.hass = this._hass;
-    sel.selector = selector;
-    sel.value = value;
-    if (label) {
-      sel.label = label;
-    }
-    sel.addEventListener("value-changed", (ev) => {
-      sel.value = ev.detail.value;
-      onValueChanged(ev.detail.value);
-    });
-    wrap.appendChild(sel);
-    return wrap;
   }
 
   _bindEvents() {
     this.shadowRoot.getElementById("save").addEventListener("click", () => this._saveConfig());
-
     this.shadowRoot.querySelectorAll(".tab").forEach((btn) => {
       btn.addEventListener("click", () => this._switchTab(btn.dataset.tab));
+    });
+
+    this.shadowRoot.getElementById("modes-add").addEventListener("click", () => {
+      const modes = [...(this._data.modes || [])];
+      modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", bypass_mode: "none", bypass_entities: [], bypass_state: "on", bypass_template: "" });
+      this._data.modes = modes;
+      this._renderModes();
+    });
+
+    this.shadowRoot.getElementById("sensors-add").addEventListener("click", () => {
+      const rules = [...(this._data.sensor_rules || [])];
+      rules.push({ entity_id: "", modes: [], bypass_modes: [], allow_open_arm: false, trigger_on_close_only: false, trigger_unknown: false, trigger_unavailable: false });
+      this._data.sensor_rules = rules;
+      this._renderSensors();
     });
 
     this.shadowRoot.getElementById("users-add").addEventListener("click", () => {
@@ -303,7 +231,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("actions-add").addEventListener("click", () => {
       const actions = [...(this._data.actions || [])];
-      actions.push({ from: [], to: [], through: [], scripts: [] });
+      actions.push({ from: ["any"], to: ["any"], through: ["any"], by_user: "any", scripts: [] });
       this._data.actions = actions;
       this._renderActions();
     });
@@ -321,76 +249,179 @@ class HAPanelNGAlarm extends HTMLElement {
       sec.classList.toggle("active", sec.id === tab);
     });
 
-    if (tab === "events") {
-      this._loadEvents();
-    }
+    if (tab === "events") this._loadEvents();
+  }
+
+  _sel(config, value, onChange, label = "") {
+    const wrap = document.createElement("div");
+    const sel = document.createElement("ha-selector");
+    sel.hass = this._hass;
+    sel.selector = config;
+    sel.value = value;
+    if (label) sel.label = label;
+    sel.addEventListener("value-changed", (ev) => {
+      sel.value = ev.detail.value;
+      onChange(ev.detail.value);
+    });
+    wrap.appendChild(sel);
+    return wrap;
+  }
+
+  _modeOptions() {
+    return (this._data.modes || []).map((m) => ({ value: m.id || "", label: m.name || m.id || "mode" }));
+  }
+
+  _renderModes() {
+    const host = this.shadowRoot.getElementById("modes-list");
+    if (!host) return;
+    host.innerHTML = "";
+
+    (this._data.modes || []).forEach((mode, idx) => {
+      const item = document.createElement("div");
+      item.className = "item";
+      const row = document.createElement("div");
+      row.className = "row";
+
+      const upd = (patch) => {
+        const modes = [...(this._data.modes || [])];
+        const next = { ...modes[idx], ...patch };
+        if (typeof next.id === "string") {
+          next.id = next.id.trim().toLowerCase().replace(/\s+/g, "_");
+        }
+        modes[idx] = next;
+        this._data.modes = modes;
+      };
+
+      row.append(
+        this._sel({ text: {} }, mode.id || "", (v) => upd({ id: v }), "Mode ID"),
+        this._sel({ text: {} }, mode.name || "", (v) => upd({ name: v }), "Mode name"),
+        this._sel({ icon: {} }, mode.icon || "mdi:shield", (v) => upd({ icon: v }), "Mode icon"),
+        this._sel({ select: { mode: "dropdown", options: [{ value: "away", label: "Away" }, { value: "home", label: "Home" }] } }, mode.arm_target || "away", (v) => upd({ arm_target: v }), "Arm target"),
+        this._sel({ select: { mode: "dropdown", options: [{ value: "none", label: "No bypass" }, { value: "entity_state", label: "Entity state" }, { value: "template", label: "Template" }] } }, mode.bypass_mode || "none", (v) => { upd({ bypass_mode: v }); this._renderModes(); }, "Bypass mode"),
+      );
+
+      const by = mode.bypass_mode || "none";
+      if (by === "entity_state") {
+        row.append(
+          this._sel({ entity: { multiple: true } }, mode.bypass_entities || [], (v) => upd({ bypass_entities: v || [] }), "Bypass entities"),
+          this._sel({ text: {} }, mode.bypass_state || "on", (v) => upd({ bypass_state: v }), "Bypass state"),
+        );
+      }
+      if (by === "template") {
+        row.append(this._sel({ template: {} }, mode.bypass_template || "", (v) => upd({ bypass_template: v }), "Bypass template"));
+      }
+
+      const del = document.createElement("button");
+      del.className = "btn danger";
+      del.type = "button";
+      del.textContent = "Delete mode";
+      del.addEventListener("click", () => {
+        const modes = [...(this._data.modes || [])];
+        modes.splice(idx, 1);
+        this._data.modes = modes;
+        this._renderModes();
+        this._renderSensors();
+        this._renderActions();
+      });
+
+      item.appendChild(row);
+      item.appendChild(del);
+      host.appendChild(item);
+    });
+  }
+
+  _renderSensors() {
+    const host = this.shadowRoot.getElementById("sensors-list");
+    if (!host) return;
+    host.innerHTML = "";
+    const modeOptions = this._modeOptions();
+
+    (this._data.sensor_rules || []).forEach((rule, idx) => {
+      const item = document.createElement("div");
+      item.className = "item";
+      const details = document.createElement("details");
+      details.open = !rule.entity_id;
+      const summary = document.createElement("summary");
+      summary.textContent = rule.entity_id || `Sensor rule #${idx + 1}`;
+      details.appendChild(summary);
+
+      const row = document.createElement("div");
+      row.className = "row";
+
+      const upd = (patch) => {
+        const rules = [...(this._data.sensor_rules || [])];
+        rules[idx] = { ...rules[idx], ...patch };
+        this._data.sensor_rules = rules;
+        summary.textContent = rules[idx].entity_id || `Sensor rule #${idx + 1}`;
+      };
+
+      row.append(
+        this._sel({ entity: { filter: { domain: "binary_sensor" } } }, rule.entity_id || "", (v) => upd({ entity_id: v }), "Sensor"),
+        this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.modes || [], (v) => upd({ modes: v || [] }), "Modes"),
+        this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.bypass_modes || [], (v) => upd({ bypass_modes: v || [] }), "Bypass in modes"),
+        this._sel({ boolean: {} }, !!rule.allow_open_arm, (v) => upd({ allow_open_arm: !!v }), "Allow open when arming"),
+        this._sel({ boolean: {} }, !!rule.trigger_on_close_only, (v) => upd({ trigger_on_close_only: !!v }), "Trigger only on close"),
+        this._sel({ boolean: {} }, !!rule.trigger_unknown, (v) => upd({ trigger_unknown: !!v }), "Trigger when unknown"),
+        this._sel({ boolean: {} }, !!rule.trigger_unavailable, (v) => upd({ trigger_unavailable: !!v }), "Trigger when unavailable"),
+      );
+
+      const del = document.createElement("button");
+      del.className = "btn danger";
+      del.type = "button";
+      del.textContent = "Delete sensor rule";
+      del.addEventListener("click", () => {
+        const rules = [...(this._data.sensor_rules || [])];
+        rules.splice(idx, 1);
+        this._data.sensor_rules = rules;
+        this._renderSensors();
+      });
+
+      details.appendChild(row);
+      details.appendChild(del);
+      item.appendChild(details);
+      host.appendChild(item);
+    });
   }
 
   _renderUsers() {
     const host = this.shadowRoot.getElementById("users-list");
     if (!host) return;
-    const users = this._data.users || [];
     host.innerHTML = "";
 
-    users.forEach((u, idx) => {
+    (this._data.users || []).forEach((u, idx) => {
+      const item = document.createElement("div");
+      item.className = "item";
       const row = document.createElement("div");
-      row.className = "row item-card";
-
-      const update = (patch) => {
-        const usersNow = [...(this._data.users || [])];
-        usersNow[idx] = { ...usersNow[idx], ...patch };
-        this._data.users = usersNow;
+      row.className = "row";
+      const upd = (patch) => {
+        const users = [...(this._data.users || [])];
+        users[idx] = { ...users[idx], ...patch };
+        this._data.users = users;
       };
 
-      const nameSelector = this._createSelector(
-        { text: {} },
-        u.name || "",
-        (value) => update({ name: value }),
-        "Name"
-      );
-      const codeSelector = this._createSelector(
-        { text: { type: "password" } },
-        u.code || "",
-        (value) => update({ code: value }),
-        "Code"
-      );
-      const canArmSelector = this._createSelector(
-        { boolean: {} },
-        !!u.can_arm,
-        (value) => update({ can_arm: !!value }),
-        "Arm"
-      );
-      const canDisarmSelector = this._createSelector(
-        { boolean: {} },
-        !!u.can_disarm,
-        (value) => update({ can_disarm: !!value }),
-        "Disarm"
-      );
-      const canPanicSelector = this._createSelector(
-        { boolean: {} },
-        !!u.can_panic,
-        (value) => update({ can_panic: !!value }),
-        "Panic"
+      row.append(
+        this._sel({ text: {} }, u.name || "", (v) => upd({ name: v }), "Name"),
+        this._sel({ text: { type: "password" } }, u.code || "", (v) => upd({ code: v }), "Code"),
+        this._sel({ boolean: {} }, !!u.can_arm, (v) => upd({ can_arm: !!v }), "Can arm"),
+        this._sel({ boolean: {} }, !!u.can_disarm, (v) => upd({ can_disarm: !!v }), "Can disarm"),
+        this._sel({ boolean: {} }, !!u.can_panic, (v) => upd({ can_panic: !!v }), "Is panic code"),
       );
 
-      [canArmSelector, canDisarmSelector, canPanicSelector].forEach((el) => {
-        el.classList.add("toggle-wrap");
-      });
-
-      const delBtn = document.createElement("button");
-      delBtn.className = "btn danger";
-      delBtn.type = "button";
-      delBtn.textContent = "✕";
-
-      delBtn.addEventListener("click", () => {
-        const usersNow = [...(this._data.users || [])];
-        usersNow.splice(idx, 1);
-        this._data.users = usersNow;
+      const del = document.createElement("button");
+      del.className = "btn danger";
+      del.type = "button";
+      del.textContent = "Delete user";
+      del.addEventListener("click", () => {
+        const users = [...(this._data.users || [])];
+        users.splice(idx, 1);
+        this._data.users = users;
         this._renderUsers();
+        this._renderActions();
       });
 
-      row.append(nameSelector, codeSelector, canArmSelector, canDisarmSelector, canPanicSelector, delBtn);
-      host.appendChild(row);
+      item.appendChild(row);
+      item.appendChild(del);
+      host.appendChild(item);
     });
   }
 
@@ -399,63 +430,51 @@ class HAPanelNGAlarm extends HTMLElement {
     if (!host) return;
     host.innerHTML = "";
 
-    const actions = this._data.actions || [];
-    actions.forEach((action, idx) => {
+    const stateOptions = [
+      { value: "any", label: "Any" },
+      { value: "disarmed", label: "Disarmed" },
+      { value: "arming", label: "Arming" },
+      { value: "armed_home", label: "Armed Home" },
+      { value: "armed_away", label: "Armed Away" },
+      { value: "pending", label: "Pending" },
+      { value: "triggered", label: "Triggered" },
+    ];
+    const throughOptions = [{ value: "any", label: "Any" }, ...this._modeOptions()];
+    const userOptions = [{ value: "any", label: "Any user" }, ...(this._data.users || []).map((u) => ({ value: (u.name || "").trim().toLowerCase() || "any", label: u.name || "Unnamed" }))];
+
+    (this._data.actions || []).forEach((action, idx) => {
+      const item = document.createElement("div");
+      item.className = "item";
       const row = document.createElement("div");
-      row.className = "row actions item-card";
-
-      const delBtn = document.createElement("button");
-      delBtn.className = "btn danger";
-      delBtn.type = "button";
-      delBtn.textContent = "✕";
-
-      const update = (patch) => {
-        const actionsNow = [...(this._data.actions || [])];
-        actionsNow[idx] = {
-          from: action.from || [],
-          to: action.to || [],
-          through: action.through || [],
-          scripts: action.scripts || [],
-          ...patch,
-        };
-        this._data.actions = actionsNow;
-        action = actionsNow[idx];
+      row.className = "row";
+      const upd = (patch) => {
+        const actions = [...(this._data.actions || [])];
+        actions[idx] = { ...actions[idx], ...patch };
+        this._data.actions = actions;
       };
 
-      const fromSelector = this._createSelector(
-        { select: { multiple: true, mode: "list", options: this._alarmStateOptions } },
-        action.from || [],
-        (value) => update({ from: value || [] }),
-        "From states"
-      );
-      const toSelector = this._createSelector(
-        { select: { multiple: true, mode: "list", options: this._alarmStateOptions } },
-        action.to || [],
-        (value) => update({ to: value || [] }),
-        "To states"
-      );
-      const throughSelector = this._createSelector(
-        { select: { multiple: true, mode: "list", options: this._throughStateOptions } },
-        action.through || [],
-        (value) => update({ through: value || [] }),
-        "Through mode"
-      );
-      const scriptSelector = this._createSelector(
-        { entity: { multiple: true, filter: { domain: "script" } } },
-        action.scripts || [],
-        (value) => update({ scripts: value || [] }),
-        "Scripts"
+      row.append(
+        this._sel({ select: { mode: "dropdown", options: stateOptions } }, (action.from || ["any"])[0] || "any", (v) => upd({ from: [v || "any"] }), "From state"),
+        this._sel({ select: { mode: "dropdown", options: stateOptions } }, (action.to || ["any"])[0] || "any", (v) => upd({ to: [v || "any"] }), "To state"),
+        this._sel({ select: { mode: "dropdown", options: throughOptions } }, (action.through || ["any"])[0] || "any", (v) => upd({ through: [v || "any"] }), "Through mode"),
+        this._sel({ select: { mode: "dropdown", options: userOptions } }, action.by_user || "any", (v) => upd({ by_user: v || "any" }), "By user"),
+        this._sel({ entity: { multiple: true, filter: { domain: "script" } } }, action.scripts || [], (v) => upd({ scripts: v || [] }), "Scripts"),
       );
 
-      delBtn.addEventListener("click", () => {
-        const actionsNow = [...(this._data.actions || [])];
-        actionsNow.splice(idx, 1);
-        this._data.actions = actionsNow;
+      const del = document.createElement("button");
+      del.className = "btn danger";
+      del.type = "button";
+      del.textContent = "Delete action";
+      del.addEventListener("click", () => {
+        const actions = [...(this._data.actions || [])];
+        actions.splice(idx, 1);
+        this._data.actions = actions;
         this._renderActions();
       });
 
-      row.append(fromSelector, toSelector, throughSelector, scriptSelector, delBtn);
-      host.appendChild(row);
+      item.appendChild(row);
+      item.appendChild(del);
+      host.appendChild(item);
     });
   }
 
@@ -463,15 +482,24 @@ class HAPanelNGAlarm extends HTMLElement {
     try {
       const data = await this._hass.callApi("get", "ng_alarm/config");
       this._data = {
+        name: "NG Alarm",
+        require_code_to_arm: true,
+        modes: [],
+        sensor_rules: [],
         users: [],
         actions: [],
-        away_trigger_states: ["on"],
-        home_trigger_states: ["on"],
-        ignore_unknown_states: true,
-        ignore_unavailable_states: true,
         ...data,
       };
-      this._refreshForms();
+
+      const form = this.shadowRoot.getElementById("form-general");
+      form.hass = this._hass;
+      form.data = this._data;
+
+      this._renderModes();
+      this._renderSensors();
+      this._renderUsers();
+      this._renderActions();
+
       this._status("Configuration loaded.");
     } catch (err) {
       this._status(`Load failed: ${err.message}`);
@@ -490,7 +518,7 @@ class HAPanelNGAlarm extends HTMLElement {
       }
       [...this._events].reverse().forEach((ev) => {
         const item = document.createElement("div");
-        item.className = "event";
+        item.className = "item";
         const ts = new Date((ev.ts || 0) * 1000).toLocaleString();
         item.innerHTML = `<strong>${ev.event || "event"}</strong> • ${ts}<br/>${ev.message || ""}<br/><span class="muted">state=${ev.state || ""} mode=${ev.mode || ""} actor=${ev.actor || ""}</span>`;
         host.appendChild(item);
@@ -513,9 +541,11 @@ class HAPanelNGAlarm extends HTMLElement {
 
   async _saveConfig() {
     try {
+      // remove legacy master codes if they still exist in storage
+      delete this._data.alarm_code;
+      delete this._data.panic_code;
       await this._hass.callApi("post", "ng_alarm/config", this._data);
       this._status("Saved and runtime reloaded.");
-      await this._loadEvents();
     } catch (err) {
       this._status(`Save failed: ${err.message}`);
     }

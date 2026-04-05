@@ -11,6 +11,7 @@ from .const import (
     BYPASS_MODE_ENTITY_STATE,
     BYPASS_MODE_TEMPLATE,
     CONF_ACTIONS,
+    CONF_ACTION_BY_USER,
     CONF_ACTION_FROM,
     CONF_ACTION_SCRIPTS,
     CONF_ACTION_THROUGH,
@@ -21,6 +22,9 @@ from .const import (
     CONF_HOME_TRIGGER_STATES,
     CONF_IGNORE_UNAVAILABLE_STATES,
     CONF_IGNORE_UNKNOWN_STATES,
+    CONF_MODES,
+    CONF_REQUIRE_CODE_TO_ARM,
+    CONF_SENSOR_RULES,
     CONF_USERS,
     CONF_USER_CAN_ARM,
     CONF_USER_CAN_DISARM,
@@ -65,9 +69,8 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
             data[key] = int(DEFAULTS[key])
 
     data["name"] = str(data.get("name") or DEFAULTS["name"])
-    data["alarm_code"] = str(data.get("alarm_code") or "")
-    data["panic_code"] = str(data.get("panic_code") or "")
     data["bypass_state"] = str(data.get("bypass_state") or DEFAULTS["bypass_state"])
+    data[CONF_REQUIRE_CODE_TO_ARM] = bool(data.get(CONF_REQUIRE_CODE_TO_ARM, True))
 
     mode = str(data.get(CONF_BYPASS_MODE) or BYPASS_MODE_ENTITY_STATE)
     data[CONF_BYPASS_MODE] = (
@@ -89,6 +92,60 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
         for v in data.get(CONF_AWAY_TRIGGER_STATES, ["on"])
         if str(v).strip()
     ] or ["on"]
+
+    modes = []
+    for mode in data.get(CONF_MODES, []) or []:
+        if not isinstance(mode, dict):
+            continue
+        mode_id = str(mode.get("id") or "").strip().lower().replace(" ", "_")
+        name = str(mode.get("name") or "").strip()
+        icon = str(mode.get("icon") or "mdi:shield")
+        arm_target = str(mode.get("arm_target") or "away").strip().lower()
+        bypass_mode = str(mode.get("bypass_mode") or "none").strip().lower()
+        bypass_entities = [
+            str(v).strip() for v in mode.get("bypass_entities", []) if str(v).strip()
+        ]
+        bypass_state = str(mode.get("bypass_state") or "on").strip()
+        bypass_template = str(mode.get("bypass_template") or "").strip()
+        if not mode_id or not name:
+            continue
+        if arm_target not in {"away", "home"}:
+            arm_target = "away"
+        if bypass_mode not in {"none", "entity_state", "template"}:
+            bypass_mode = "none"
+        modes.append(
+            {
+                "id": mode_id,
+                "name": name,
+                "icon": icon,
+                "arm_target": arm_target,
+                "bypass_mode": bypass_mode,
+                "bypass_entities": bypass_entities,
+                "bypass_state": bypass_state,
+                "bypass_template": bypass_template,
+            }
+        )
+    data[CONF_MODES] = modes
+
+    sensor_rules = []
+    for rule in data.get(CONF_SENSOR_RULES, []) or []:
+        if not isinstance(rule, dict):
+            continue
+        entity_id = str(rule.get("entity_id") or "").strip()
+        if not entity_id:
+            continue
+        sensor_rules.append(
+            {
+                "entity_id": entity_id,
+                "modes": [str(v).strip().lower() for v in rule.get("modes", []) if str(v).strip()],
+                "bypass_modes": [str(v).strip().lower() for v in rule.get("bypass_modes", []) if str(v).strip()],
+                "allow_open_arm": bool(rule.get("allow_open_arm", False)),
+                "trigger_on_close_only": bool(rule.get("trigger_on_close_only", False)),
+                "trigger_unknown": bool(rule.get("trigger_unknown", False)),
+                "trigger_unavailable": bool(rule.get("trigger_unavailable", False)),
+            }
+        )
+    data[CONF_SENSOR_RULES] = sensor_rules
 
     users = []
     for user in data.get(CONF_USERS, []) or []:
@@ -133,6 +190,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                     for v in action.get(CONF_ACTION_THROUGH, [])
                     if str(v).strip()
                 ],
+                CONF_ACTION_BY_USER: str(action.get(CONF_ACTION_BY_USER, "any") or "any").strip(),
                 CONF_ACTION_SCRIPTS: scripts,
             }
         )

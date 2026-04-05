@@ -24,8 +24,8 @@ from .const import (
     ATTR_ACTOR,
     ATTR_TRIGGERED_SENSOR,
     ATTR_TRIGGERED_SENSOR_NAME,
-    CONF_ALARM_CODE,
     CONF_ACTIONS,
+    CONF_ACTION_BY_USER,
     CONF_ACTION_FROM,
     CONF_ACTION_SCRIPTS,
     CONF_ACTION_THROUGH,
@@ -49,10 +49,12 @@ from .const import (
     CONF_HOME_TRIGGER_STATES,
     CONF_IGNORE_UNAVAILABLE_STATES,
     CONF_IGNORE_UNKNOWN_STATES,
+    CONF_MODES,
     CONF_NAME,
-    CONF_PANIC_CODE,
     CONF_PANIC_SCRIPTS,
     CONF_PENDING_SCRIPTS,
+    CONF_REQUIRE_CODE_TO_ARM,
+    CONF_SENSOR_RULES,
     CONF_TRIGGERED_SCRIPTS,
     CONF_USERS,
     CONF_USER_CAN_ARM,
@@ -68,6 +70,10 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _normalize_mode_id(value: str | None) -> str:
+    return str(value or "").strip().lower().replace(" ", "_")
 
 
 def _state_str(state: AlarmControlPanelState) -> str:
@@ -98,8 +104,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
     _attr_supported_features = (
         AlarmControlPanelEntityFeature.ARM_AWAY | AlarmControlPanelEntityFeature.ARM_HOME
     )
-    _attr_code_format = CodeFormat.NUMBER
-    _attr_code_arm_required = True
+    _attr_code_format = CodeFormat.TEXT
+    _attr_code_arm_required = False
 
     def __init__(self, hass: HomeAssistant, config: dict[str, Any]) -> None:
         self.hass = hass
@@ -113,6 +119,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._triggered_sensor = UNKNOWN
         self._triggered_sensor_name = UNKNOWN
         self._last_actor = UNKNOWN
+        self._current_mode_id = UNKNOWN
         self._event_log: list[dict[str, Any]] = []
 
         self._exit_unsub = None
@@ -132,6 +139,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
             ATTR_ALARM_MODE: _state_str(self._armed_mode) if self._armed_mode else UNKNOWN,
             ATTR_ACTOR: self._last_actor,
+            "current_mode": self._current_mode_id,
         }
 
     async def async_added_to_hass(self) -> None:
@@ -154,6 +162,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._triggered_sensor = saved.get("triggered_sensor", UNKNOWN)
             self._triggered_sensor_name = saved.get("triggered_sensor_name", UNKNOWN)
             self._last_actor = saved.get("last_actor", UNKNOWN)
+            self._current_mode_id = saved.get("current_mode_id", UNKNOWN)
             self._event_log = list(saved.get("event_log", []))[-200:]
 
         await self._async_bind_bypass_listener()
@@ -182,6 +191,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 "triggered_sensor": self._triggered_sensor,
                 "triggered_sensor_name": self._triggered_sensor_name,
                 "last_actor": self._last_actor,
+                "current_mode_id": self._current_mode_id,
                 "event_log": self._event_log[-200:],
             }
         )
@@ -219,6 +229,34 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
     def _with_users(self) -> bool:
         return bool(self._config.get(CONF_USERS))
 
+    @property
+    def code_arm_required(self) -> bool:
+        return bool(self._config.get(CONF_REQUIRE_CODE_TO_ARM, True))
+
+    def _resolve_mode_for_arm(self, target: str) -> str:
+        modes = self._config.get(CONF_MODES, []) or []
+        if not modes:
+            return UNKNOWN
+        for mode in modes:
+            if str(mode.get("arm_target", target)).strip().lower() == target:
+                return _normalize_mode_id(mode.get("id"))
+        return _normalize_mode_id(modes[0].get("id"))
+
+    def _authorize_arm(self, code: str | None) -> str | None:
+        require_code = bool(self._config.get(CONF_REQUIRE_CODE_TO_ARM, True))
+        if self._with_users():
+            if not require_code and not str(code or "").strip():
+                return UNKNOWN
+            user = self._resolve_user_from_code(code)
+            if not user or not bool(user.get(CONF_USER_CAN_ARM, False)):
+                return None
+            return self._actor_name(user)
+
+        # No legacy master code: allow arming only when code is optional.
+        if require_code:
+            return None
+        return UNKNOWN
+
     def _actor_name(self, user: dict[str, Any] | None) -> str:
         if user:
             return str(user.get(CONF_USER_NAME, "") or "user")
@@ -238,7 +276,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         to_state: str,
         alarm_state: str,
     ) -> None:
-        through_state = _state_str(self._armed_mode) if self._armed_mode else UNKNOWN
+        through_state = self._current_mode_id if self._current_mode_id != UNKNOWN else (_state_str(self._armed_mode) if self._armed_mode else UNKNOWN)
         variables = {
             ATTR_TRIGGERED_SENSOR: self._triggered_sensor,
             ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
@@ -257,6 +295,9 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 continue
             if not self._action_matches(action.get(CONF_ACTION_THROUGH, []), through_state):
                 continue
+            by_user = str(action.get(CONF_ACTION_BY_USER, "any") or "any").strip().lower()
+            if by_user not in {"", "any"} and by_user != str(self._last_actor).strip().lower():
+                continue
 
             for entity_id in action.get(CONF_ACTION_SCRIPTS, []):
                 await self.hass.services.async_call(
@@ -270,7 +311,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         variables = {
             ATTR_TRIGGERED_SENSOR: self._triggered_sensor,
             ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
-            ATTR_ALARM_MODE: _state_str(self._armed_mode) if self._armed_mode else UNKNOWN,
+            ATTR_ALARM_MODE: self._current_mode_id if self._current_mode_id != UNKNOWN else (_state_str(self._armed_mode) if self._armed_mode else UNKNOWN),
             ATTR_ALARM_STATE: alarm_state,
             ATTR_ACTOR: self._last_actor,
         }
@@ -302,13 +343,47 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if self._bypass_unsub:
             self._bypass_unsub()
             self._bypass_unsub = None
-        entities = self._config.get(CONF_BYPASS_ENTITIES, [])
+
+        entities: set[str] = set(self._config.get(CONF_BYPASS_ENTITIES, []) or [])
+        for mode in self._config.get(CONF_MODES, []) or []:
+            entities.update(mode.get("bypass_entities", []) or [])
+
         if entities:
             self._bypass_unsub = async_track_state_change_event(
-                self.hass, entities, self._async_bypass_changed
+                self.hass, list(entities), self._async_bypass_changed
             )
 
+    def _mode_config(self, mode_id: str | None = None) -> dict[str, Any] | None:
+        wanted = _normalize_mode_id(mode_id or self._current_mode_id)
+        for mode in self._config.get(CONF_MODES, []) or []:
+            if _normalize_mode_id(mode.get("id")) == wanted:
+                return mode
+        return None
+
     def _is_bypass_active(self) -> bool:
+        mode = self._mode_config()
+        if mode:
+            mode_bypass = str(mode.get("bypass_mode", "none")).lower()
+            if mode_bypass == "none":
+                return False
+            if mode_bypass == "template":
+                tpl = str(mode.get("bypass_template", "")).strip()
+                if not tpl:
+                    return False
+                try:
+                    rendered = Template(tpl, self.hass).async_render(parse_result=False)
+                    return result_as_boolean(rendered)
+                except TemplateError as err:
+                    _LOGGER.debug("Bypass template render failed: %s", err)
+                    return False
+
+            bypass_state = str(mode.get("bypass_state", "")).strip()
+            for entity_id in mode.get("bypass_entities", []) or []:
+                state = self.hass.states.get(entity_id)
+                if state and state.state == bypass_state:
+                    return True
+            return False
+
         if self._config.get(CONF_BYPASS_MODE) == BYPASS_MODE_TEMPLATE:
             tpl = str(self._config.get(CONF_BYPASS_TEMPLATE, "")).strip()
             if not tpl:
@@ -344,7 +419,31 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             }
         return {"on"}
 
+    def _sensor_rule(self, entity_id: str) -> dict[str, Any] | None:
+        for rule in self._config.get(CONF_SENSOR_RULES, []) or []:
+            if str(rule.get("entity_id", "")).strip() == entity_id:
+                return rule
+        return None
+
     def _monitored_sensors(self) -> list[str]:
+        rules = self._config.get(CONF_SENSOR_RULES, []) or []
+        if rules and self._current_mode_id and self._current_mode_id != UNKNOWN:
+            result: list[str] = []
+            bypass_active = self._is_bypass_active()
+            for rule in rules:
+                entity_id = str(rule.get("entity_id", "")).strip()
+                if not entity_id:
+                    continue
+                modes = [_normalize_mode_id(v) for v in rule.get("modes", [])]
+                if modes and self._current_mode_id not in modes:
+                    continue
+                bypass_modes = [_normalize_mode_id(v) for v in rule.get("bypass_modes", [])]
+                if bypass_active and self._current_mode_id in bypass_modes:
+                    continue
+                result.append(entity_id)
+            return result
+
+        # legacy fallback
         if self._alarm_state == AlarmControlPanelState.ARMED_AWAY:
             sensors = list(self._config.get(CONF_AWAY_ACTIVE_SENSORS, []))
             if not self._is_bypass_active():
@@ -385,19 +484,27 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if not new_state:
             return
 
+        entity_id = event.data.get("entity_id", UNKNOWN)
+        rule = self._sensor_rule(entity_id)
+
         new_state_value = str(new_state.state).lower()
-        if (
-            new_state_value == "unknown"
-            and self._config.get(CONF_IGNORE_UNKNOWN_STATES, True)
-        ):
+        ignore_unknown = self._config.get(CONF_IGNORE_UNKNOWN_STATES, True)
+        ignore_unavailable = self._config.get(CONF_IGNORE_UNAVAILABLE_STATES, True)
+        if rule:
+            ignore_unknown = not bool(rule.get("trigger_unknown", False))
+            ignore_unavailable = not bool(rule.get("trigger_unavailable", False))
+
+        if new_state_value == "unknown" and ignore_unknown:
             return
-        if (
-            new_state_value == "unavailable"
-            and self._config.get(CONF_IGNORE_UNAVAILABLE_STATES, True)
-        ):
+        if new_state_value == "unavailable" and ignore_unavailable:
             return
 
-        if new_state_value not in self._trigger_states():
+        if rule and bool(rule.get("trigger_on_close_only", False)):
+            old_state = event.data.get("old_state")
+            old_state_value = str(old_state.state).lower() if old_state else ""
+            if not (old_state_value == "on" and new_state_value == "off"):
+                return
+        elif new_state_value not in self._trigger_states():
             return
 
         prev = _state_str(self._alarm_state)
@@ -459,33 +566,29 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         return str(given or "") == str(expected or "")
 
     async def async_alarm_arm_away(self, code=None) -> None:
-        actor = UNKNOWN
-        if self._with_users():
-            user = self._resolve_user_from_code(code)
-            if not user or not bool(user.get(CONF_USER_CAN_ARM, False)):
-                await self._async_log_event("denied", "Denied arm away: code/permission mismatch")
-                return
-            actor = self._actor_name(user)
-        elif not self._code_ok(code, self._config.get(CONF_ALARM_CODE, "")):
-            await self._async_log_event("denied", "Denied arm away: invalid code")
+        actor = self._authorize_arm(code)
+        if actor is None:
+            await self._async_log_event("denied", "Denied arm away: code/permission mismatch")
             return
         self._last_actor = actor
+        self._current_mode_id = self._resolve_mode_for_arm("away")
+        if self._current_mode_id == UNKNOWN:
+            await self._async_log_event("denied", "Denied arm away: no modes configured")
+            return
         await self._async_arm(
             AlarmControlPanelState.ARMED_AWAY, int(self._config.get(CONF_EXIT_DELAY_AWAY, 0))
         )
 
     async def async_alarm_arm_home(self, code=None) -> None:
-        actor = UNKNOWN
-        if self._with_users():
-            user = self._resolve_user_from_code(code)
-            if not user or not bool(user.get(CONF_USER_CAN_ARM, False)):
-                await self._async_log_event("denied", "Denied arm home: code/permission mismatch")
-                return
-            actor = self._actor_name(user)
-        elif not self._code_ok(code, self._config.get(CONF_ALARM_CODE, "")):
-            await self._async_log_event("denied", "Denied arm home: invalid code")
+        actor = self._authorize_arm(code)
+        if actor is None:
+            await self._async_log_event("denied", "Denied arm home: code/permission mismatch")
             return
         self._last_actor = actor
+        self._current_mode_id = self._resolve_mode_for_arm("home")
+        if self._current_mode_id == UNKNOWN:
+            await self._async_log_event("denied", "Denied arm home: no modes configured")
+            return
         await self._async_arm(
             AlarmControlPanelState.ARMED_HOME, int(self._config.get(CONF_EXIT_DELAY_HOME, 0))
         )
@@ -496,6 +599,29 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._triggered_sensor_name = UNKNOWN
         self._armed_mode = mode
         prev = _state_str(self._alarm_state)
+
+        # Block arming if configured sensors are open and not allowed.
+        blocking: list[str] = []
+        for rule in self._config.get(CONF_SENSOR_RULES, []) or []:
+            entity_id = str(rule.get("entity_id", "")).strip()
+            if not entity_id:
+                continue
+            modes = [_normalize_mode_id(v) for v in rule.get("modes", [])]
+            if modes and self._current_mode_id not in modes:
+                continue
+            if bool(rule.get("allow_open_arm", False)):
+                continue
+            st = self.hass.states.get(entity_id)
+            if st and str(st.state).lower() in {"on", "open", "true"}:
+                blocking.append(entity_id)
+
+        if blocking:
+            await self._async_log_event(
+                "arm_blocked",
+                "Arming blocked due to open sensors",
+                sensors=blocking,
+            )
+            return
 
         self._alarm_state = AlarmControlPanelState.ARMING if delay > 0 else mode
         self.async_write_ha_state()
@@ -525,13 +651,12 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             if not bool(user.get(CONF_USER_CAN_DISARM, False)):
                 await self._async_log_event("denied", "Denied disarm: missing disarm permission")
                 return
+            panic = bool(user.get(CONF_USER_CAN_PANIC, False)) and bool(
+                str(code or "").strip()
+            )
         else:
-            panic_code = str(self._config.get(CONF_PANIC_CODE, ""))
-            alarm_code = str(self._config.get(CONF_ALARM_CODE, ""))
-            panic = bool(panic_code and self._code_ok(code, panic_code))
-            if not panic and not self._code_ok(code, alarm_code):
-                await self._async_log_event("denied", "Denied disarm: invalid code")
-                return
+            await self._async_log_event("denied", "Denied disarm: no users configured")
+            return
 
         self._last_actor = actor
 
@@ -542,6 +667,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
         self._alarm_state = AlarmControlPanelState.DISARMED
         self._armed_mode = None
+        self._current_mode_id = UNKNOWN
         self._triggered_sensor = UNKNOWN
         self._triggered_sensor_name = UNKNOWN
         self.async_write_ha_state()
@@ -563,12 +689,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 return
             actor = self._actor_name(user)
         else:
-            panic_code = str(self._config.get(CONF_PANIC_CODE, ""))
-            alarm_code = str(self._config.get(CONF_ALARM_CODE, ""))
-            required = panic_code or alarm_code
-            if required and not self._code_ok(code, required):
-                await self._async_log_event("denied", "Denied trigger: invalid code")
-                return
+            await self._async_log_event("denied", "Denied trigger: no users configured")
+            return
 
         if self._alarm_state in (
             AlarmControlPanelState.ARMED_AWAY,
