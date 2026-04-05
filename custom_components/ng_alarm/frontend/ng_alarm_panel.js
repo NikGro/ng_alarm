@@ -9,6 +9,7 @@ class HAPanelNGAlarm extends HTMLElement {
     this._eventZones = [];
     this._selectedEventZone = "all";
     this._openZoneDetails = {};
+    this._openGlobalBypassDetails = {};
     this._activeTab = "general";
   }
 
@@ -127,7 +128,7 @@ class HAPanelNGAlarm extends HTMLElement {
           background: var(--secondary-background-color, var(--card-background-color));
         }
         details > summary { cursor:pointer; font-weight:600; }
-        .row { display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px; }
+        .row { display:grid; grid-template-columns: 1fr; gap:8px; margin-top:8px; }
 
         .btn {
           border:1px solid var(--divider-color);
@@ -152,10 +153,14 @@ class HAPanelNGAlarm extends HTMLElement {
         ha-card::part(header) { padding-left: 0 !important; padding-right: 0 !important; }
         #status.status-ok { color: #1b8f3a; font-weight: 600; }
         #status.status-error { color: #b00020; font-weight: 600; }
+        .action-btn-row { display:flex; align-items:center; gap:10px; margin-top: 10px; flex-wrap: wrap; }
+        .action-btn-row .btn { min-width: 150px; justify-content: center; border-radius: 999px; }
+        .inline-test-result { font-size: 0.9rem; color: var(--secondary-text-color); }
+        .inline-test-result.ok { color: #1b8f3a; font-weight: 600; }
+        .inline-test-result.err { color: #b00020; font-weight: 600; }
 
         @media (max-width: 800px) {
           .wrap { max-width: 100%; padding: 0 10px 10px; }
-          .row { grid-template-columns: 1fr; }
           .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .btn-save { min-width: 156px; }
         }
@@ -552,7 +557,13 @@ class HAPanelNGAlarm extends HTMLElement {
       const item = document.createElement("div");
       item.className = "item";
       const details = document.createElement("details");
-      details.open = !rule.name;
+      const key = (rule.id || `global_${idx}`).toString();
+      details.open = Object.prototype.hasOwnProperty.call(this._openGlobalBypassDetails, key)
+        ? !!this._openGlobalBypassDetails[key]
+        : !rule.name;
+      details.addEventListener("toggle", () => {
+        this._openGlobalBypassDetails[key] = details.open;
+      });
       const summary = document.createElement("summary");
       summary.innerHTML = `<ha-icon icon="${rule.icon || "mdi:swap-horizontal"}"></ha-icon> ${rule.name || rule.id || `Global bypass #${idx + 1}`}`;
       details.appendChild(summary);
@@ -571,13 +582,33 @@ class HAPanelNGAlarm extends HTMLElement {
       row.append(
         this._sel({ text: {} }, rule.name || "", (v) => upd({ name: v }), "Name"),
         this._sel({ icon: {} }, rule.icon || "mdi:swap-horizontal", (v) => upd({ icon: v }), "Icon"),
-        this._sel({ select: { mode: "dropdown", options: [{ value: "entity_state", label: "Entities" }, { value: "template", label: "Template" }] } }, rule.mode || "entity_state", (v) => { upd({ mode: v }); this._renderGlobalBypass(); }, "Rule type"),
+      );
+
+      const sep = document.createElement("hr");
+      sep.className = "sep";
+      row.appendChild(sep);
+
+      row.append(
+        this._sel(
+          { select: { mode: "dropdown", options: [{ value: "entity_state", label: "Entities" }, { value: "template", label: "Template" }] } },
+          rule.mode || "entity_state",
+          (v) => { upd({ mode: v }); this._renderGlobalBypass(); },
+          "Rule type"
+        ),
       );
 
       const rmode = rule.mode || "entity_state";
       if (rmode === "entity_state") {
-        row.append(this._sel({ entity: { multiple: true } }, rule.entities || [], (v) => upd({ entities: v || [] }), "Entities (truthy => active)"));
+        const hint = document.createElement("div");
+        hint.className = "muted";
+        hint.textContent = "Active when any selected entity is truthy (on/open/home/active).";
+        row.append(hint);
+        row.append(this._sel({ entity: { multiple: true } }, rule.entities || [], (v) => upd({ entities: v || [] }), "Entities"));
       } else {
+        const hint = document.createElement("div");
+        hint.className = "muted";
+        hint.textContent = "Template should evaluate to true/false.";
+        row.append(hint);
         row.append(this._sel({ template: {} }, rule.template || "", (v) => upd({ template: v }), "Template"));
       }
 
@@ -585,12 +616,14 @@ class HAPanelNGAlarm extends HTMLElement {
       test.className = "btn";
       test.type = "button";
       test.textContent = "Test condition";
+      const testResult = document.createElement("span");
+      testResult.className = "inline-test-result";
       test.addEventListener("click", async () => {
         const current = (this._data.global_bypass_rules || [])[idx] || {};
         const result = await this._testGlobalBypassRule(current);
-        this._status(
-          `Global bypass \"${current.name || current.id || `#${idx + 1}`}\": ${result ? "ACTIVE" : "inactive"}`
-        );
+        testResult.classList.remove("ok", "err");
+        testResult.classList.add(result ? "ok" : "err");
+        testResult.textContent = result ? "ACTIVE" : "inactive";
       });
 
       const del = document.createElement("button");
@@ -605,9 +638,12 @@ class HAPanelNGAlarm extends HTMLElement {
         this._renderSensors();
       });
 
+      const btnRow = document.createElement("div");
+      btnRow.className = "action-btn-row";
+      btnRow.append(test, del, testResult);
+
       details.appendChild(row);
-      details.appendChild(test);
-      details.appendChild(del);
+      details.appendChild(btnRow);
       item.appendChild(details);
       host.appendChild(item);
     });
