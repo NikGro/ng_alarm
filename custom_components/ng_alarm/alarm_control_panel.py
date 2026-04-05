@@ -146,7 +146,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
     """NG Alarm control panel implementation."""
 
     _attr_code_format = CodeFormat.NUMBER
-    _attr_code_arm_required = False
+    _attr_code_arm_required = True
 
     def __init__(self, hass: HomeAssistant, config: dict[str, Any], zone_id: str | None = None) -> None:
         self.hass = hass
