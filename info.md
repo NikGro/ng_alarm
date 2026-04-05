@@ -1,3 +1,3 @@
 # NG Alarm
 
-Alarm integration with native sidebar configuration UI, script-driven actions, bypass-aware sensor groups, and no config flow.
+Zone-centric Home Assistant alarm integration with native UI selectors, user/code permissions, action builder flows, and event logging.

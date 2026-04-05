@@ -53,8 +53,21 @@ class NGAlarmConfigView(HomeAssistantView):
         normalized = await save_config(runtime.store, payload)
         runtime.config = normalized
 
-        if runtime.entity:
-            await runtime.entity.async_reload_config(normalized)
+        for entity in (runtime.entities or ([runtime.entity] if runtime.entity else [])):
+            if entity:
+                await entity.async_reload_config(normalized)
+
+        try:
+            entries = hass.config_entries.async_entries(DOMAIN)
+            if entries:
+                await hass.services.async_call(
+                    "homeassistant",
+                    "reload_config_entry",
+                    {"entry_id": entries[0].entry_id},
+                    blocking=True,
+                )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("reload_config_entry after save failed: %s", err)
 
         return self.json({"ok": True, "config": normalized})
 
@@ -72,8 +85,9 @@ class NGAlarmReloadView(HomeAssistantView):
         runtime = hass.data[DOMAIN][RUNTIME_STATE_KEY]
         runtime.config = normalize_config(await runtime.store.async_load())
 
-        if runtime.entity:
-            await runtime.entity.async_reload_config(runtime.config)
+        for entity in (runtime.entities or ([runtime.entity] if runtime.entity else [])):
+            if entity:
+                await entity.async_reload_config(runtime.config)
 
         return self.json({"ok": True, "config": runtime.config})
 
@@ -88,9 +102,13 @@ class NGAlarmEventsView(HomeAssistantView):
     async def get(self, request):
         hass = request.app["hass"]
         runtime = hass.data[DOMAIN][RUNTIME_STATE_KEY]
-        entity = runtime.entity
-        events = entity.get_event_log() if entity else []
-        return self.json({"events": events})
+        entities = runtime.entities or ([runtime.entity] if runtime.entity else [])
+        events = []
+        for entity in entities:
+            if entity:
+                events.extend(entity.get_event_log())
+        events.sort(key=lambda x: x.get("ts", 0))
+        return self.json({"events": events[-500:]})
 
 
 class NGAlarmEventsClearView(HomeAssistantView):
@@ -103,9 +121,9 @@ class NGAlarmEventsClearView(HomeAssistantView):
     async def post(self, request):
         hass = request.app["hass"]
         runtime = hass.data[DOMAIN][RUNTIME_STATE_KEY]
-        entity = runtime.entity
-        if entity:
-            await entity.async_clear_event_log()
+        for entity in (runtime.entities or ([runtime.entity] if runtime.entity else [])):
+            if entity:
+                await entity.async_clear_event_log()
         return self.json({"ok": True})
 
 

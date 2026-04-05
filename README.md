@@ -1,44 +1,54 @@
 # NG Alarm
 
-Custom Home Assistant alarm integration with a native editable configuration page (no config flow).
+A modern, zone-centric Home Assistant alarm integration with native-feeling configuration UI, user/code permissions, sensor rules, action flows, and event logging.
+
+> Built with focus, iteration, and a little vibe-coding energy.
 
 ## Highlights
 
-- `alarm_control_panel` backend with modes `armed_away` and `armed_home`
-- Independent entry/exit delays per mode
-- Sensor groups: away/home active + away/home bypass
-- Trigger-state controls per mode (`away_trigger_states`, `home_trigger_states`)
-- Unknown/unavailable sensor handling flags
-- Bypass condition modes:
-  - **Entity state mode** (`bypass_entities` + `bypass_state`)
-  - **Template mode** (`bypass_template`)
-- Users & code permissions (`can_arm`, `can_disarm`, `can_panic`)
-- Action Builder rules (`from` / `to` / `through`) with script targets
-- Legacy state scripts (`pending`, `triggered`, `armed_*`, `disarmed`, `panic`)
-- Event log panel with clear/refresh API
-- Runtime state persistence across restart
-- Native HA-style sidebar page with tabbed editor
+- Zone-based alarm model (custom zones with icon/name)
+- Native arm-type support (away, home, night, vacation)
+- Per-zone delays and timeout behavior
+- Per-zone bypass strategy (none, entity-state, template)
+- User/code management with permission controls
+- Sensor rules with per-zone enable/bypass behavior
+- Action builder (from/to/through/by-user + target entities)
+- Event log panel with clear + export
+- Optional event-log sensor exposure
+- Sidebar panel UI with Home Assistant selectors
 
-## Install (HACS)
+## Install with HACS
 
 1. Add custom repository: `https://github.com/NikGro/ng_alarm`
 2. Category: **Integration**
 3. Install and restart Home Assistant
 
-## Enable integration
+## Enable
 
 1. Go to **Settings → Devices & Services → Add Integration**
 2. Add **Alarm**
-3. Open sidebar item **Alarm** to edit runtime configuration
+3. Open sidebar item **Alarm**
 
-No settings are configured in config flow; all editing is done in the panel page.
-
-## API endpoints
+## API
 
 - `GET /api/ng_alarm/config`
 - `POST /api/ng_alarm/config`
 - `POST /api/ng_alarm/reload`
+- `GET /api/ng_alarm/events`
+- `POST /api/ng_alarm/events/clear`
 
 ## Service
 
 - `ng_alarm.reload`
+
+## Variables passed to action targets
+
+When an action rule matches, script targets receive:
+
+- `from_state`
+- `to_state`
+- `alarm_state`
+- `alarm_mode`
+- `actor`
+- `triggered_sensor`
+- `triggered_sensor_name`

@@ -29,13 +29,24 @@ class NGAlarmEventLogSensor(SensorEntity):
     def __init__(self, runtime) -> None:
         self._runtime = runtime
 
+    def _all_events(self):
+        entities = self._runtime.entities or ([self._runtime.entity] if self._runtime.entity else [])
+        events = []
+        for entity in entities:
+            if entity:
+                events.extend(entity.get_event_log())
+        events.sort(key=lambda x: x.get("ts", 0))
+        return events
+
     @property
     def available(self) -> bool:
-        return bool(self._runtime.config.get(CONF_EXPOSE_EVENT_LOG_SENSOR, False))
+        return True
 
     @property
     def native_value(self):
-        events = self._runtime.entity.get_event_log() if self._runtime.entity else []
+        if not bool(self._runtime.config.get(CONF_EXPOSE_EVENT_LOG_SENSOR, False)):
+            return "disabled"
+        events = self._all_events()
         if not events:
             return "no_events"
         last = events[-1]
@@ -44,7 +55,7 @@ class NGAlarmEventLogSensor(SensorEntity):
 
     @property
     def extra_state_attributes(self):
-        events = self._runtime.entity.get_event_log() if self._runtime.entity else []
+        events = self._all_events()
         last = events[-1] if events else {}
         return {
             "event_count": len(events),
@@ -53,4 +64,5 @@ class NGAlarmEventLogSensor(SensorEntity):
             "last_state": last.get("state"),
             "last_mode": last.get("mode"),
             "last_ts": last.get("ts"),
+            "enabled": bool(self._runtime.config.get(CONF_EXPOSE_EVENT_LOG_SENSOR, False)),
         }

@@ -30,13 +30,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if RUNTIME_STATE_KEY not in hass.data[DOMAIN]:
         store = create_store(hass)
         persisted = await load_config(store)
-        runtime = NGAlarmRuntime(store=store, config=persisted)
+        runtime = NGAlarmRuntime(store=store, config=persisted, entities=[])
         hass.data[DOMAIN][RUNTIME_STATE_KEY] = runtime
 
         async def _handle_reload_service(call):
             runtime.config = await load_config(store)
-            if runtime.entity:
-                await runtime.entity.async_reload_config(runtime.config)
+            for entity in (runtime.entities or ([runtime.entity] if runtime.entity else [])):
+                if entity:
+                    await entity.async_reload_config(runtime.config)
 
         if not hass.services.has_service(DOMAIN, "reload"):
             hass.services.async_register(DOMAIN, "reload", _handle_reload_service)

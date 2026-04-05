@@ -88,6 +88,13 @@ def _normalize_mode_id(value: str | None) -> str:
     return str(value or "").strip().lower().replace(" ", "_")
 
 
+def _clean_code(value) -> str:
+    code = str(value or "")
+    if code.startswith("undefined"):
+        code = code.replace("undefined", "", 1)
+    return code
+
+
 def _state_str(state: AlarmControlPanelState) -> str:
     """Return legacy string representation for scripts."""
     if state == STATE_ARMED_NIGHT:
@@ -109,9 +116,21 @@ async def async_setup_entry(
 ) -> None:
     """Set up platform from config entry."""
     runtime = hass.data[DOMAIN][RUNTIME_STATE_KEY]
-    entity = NGAlarmControlPanel(hass, runtime.config)
-    runtime.entity = entity
-    async_add_entities([entity])
+    zones = runtime.config.get(CONF_MODES, []) or []
+
+    entities: list[NGAlarmControlPanel] = []
+    if zones:
+        for zone in zones:
+            zone_id = _normalize_mode_id(zone.get("id"))
+            if not zone_id:
+                continue
+            entities.append(NGAlarmControlPanel(hass, runtime.config, zone_id=zone_id))
+    else:
+        entities.append(NGAlarmControlPanel(hass, runtime.config, zone_id=None))
+
+    runtime.entities = entities
+    runtime.entity = entities[0] if entities else None
+    async_add_entities(entities)
 
 
 class NGAlarmControlPanel(AlarmControlPanelEntity):
@@ -120,19 +139,24 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
     _attr_code_format = CodeFormat.NUMBER
     _attr_code_arm_required = False
 
-    def __init__(self, hass: HomeAssistant, config: dict[str, Any]) -> None:
+    def __init__(self, hass: HomeAssistant, config: dict[str, Any], zone_id: str | None = None) -> None:
         self.hass = hass
-        self._store = Store(hass, 1, f"{STORAGE_KEY}.runtime")
+        self._zone_id = _normalize_mode_id(zone_id) if zone_id else None
+        self._store = Store(hass, 1, f"{STORAGE_KEY}.runtime.{self._zone_id or 'main'}")
         self._config = config
-        self._attr_name = config.get(CONF_NAME, "NG Alarm")
-        self._attr_unique_id = f"{DOMAIN}_main"
+
+        zone_cfg = self._mode_config(self._zone_id) if self._zone_id else None
+        zone_name = (zone_cfg or {}).get("name") if zone_cfg else None
+        base_name = config.get(CONF_NAME, "NG Alarm")
+        self._attr_name = f"{base_name} - {zone_name}" if zone_name else base_name
+        self._attr_unique_id = f"{DOMAIN}_{self._zone_id or 'main'}"
 
         self._alarm_state = AlarmControlPanelState.DISARMED
         self._armed_mode: AlarmControlPanelState | None = None
         self._triggered_sensor = UNKNOWN
         self._triggered_sensor_name = UNKNOWN
         self._last_actor = UNKNOWN
-        self._current_mode_id = UNKNOWN
+        self._current_mode_id = self._zone_id or UNKNOWN
         self._event_log: list[dict[str, Any]] = []
 
         self._exit_unsub = None
@@ -143,13 +167,25 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     @property
     def supported_features(self) -> AlarmControlPanelEntityFeature:
-        """Expose only arm modes that are actually configured."""
+        """Expose only arm modes configured for this zone/entity."""
         features = AlarmControlPanelEntityFeature(0)
-        targets = {
-            str(m.get("arm_target", "")).strip().lower()
-            for m in (self._config.get(CONF_MODES, []) or [])
-            if isinstance(m, dict)
-        }
+
+        if self._zone_id:
+            zone = self._mode_config(self._zone_id) or {}
+            targets = {str(v).strip().lower() for v in zone.get("arm_types", []) if str(v).strip()}
+            if not targets:
+                t = str(zone.get("arm_target", "")).strip().lower()
+                if t:
+                    targets = {t}
+        else:
+            targets = {
+                str(t).strip().lower()
+                for m in (self._config.get(CONF_MODES, []) or [])
+                if isinstance(m, dict)
+                for t in (m.get("arm_types", [m.get("arm_target", "")]) or [])
+                if str(t).strip()
+            }
+
         if "away" in targets or "vacation" in targets:
             features |= AlarmControlPanelEntityFeature.ARM_AWAY
         if "home" in targets or "night" in targets:
@@ -281,11 +317,25 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         return True
 
     def _resolve_mode_for_arm(self, target: str) -> str:
+        target = str(target).strip().lower()
         modes = self._config.get(CONF_MODES, []) or []
         if not modes:
             return UNKNOWN
+
+        if self._zone_id:
+            zone = self._mode_config(self._zone_id)
+            if not zone:
+                return UNKNOWN
+            arm_types = [str(v).strip().lower() for v in zone.get("arm_types", []) if str(v).strip()]
+            if not arm_types:
+                arm_types = [str(zone.get("arm_target", "")).strip().lower()]
+            return self._zone_id if target in set(arm_types) else UNKNOWN
+
         for mode in modes:
-            if str(mode.get("arm_target", target)).strip().lower() == target:
+            arm_types = [str(v).strip().lower() for v in mode.get("arm_types", []) if str(v).strip()]
+            if not arm_types:
+                arm_types = [str(mode.get("arm_target", target)).strip().lower()]
+            if target in set(arm_types):
                 return _normalize_mode_id(mode.get("id"))
         return _normalize_mode_id(modes[0].get("id"))
 
@@ -649,9 +699,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             await self._async_run_scripts(CONF_ARMED_HOME_SCRIPTS, "armed_home")
 
     def _code_ok(self, given, expected: str) -> bool:
-        return str(given or "") == str(expected or "")
+        return _clean_code(given) == str(expected or "")
 
     async def async_alarm_arm_away(self, code=None) -> None:
+        code = _clean_code(code)
         self._current_mode_id = self._resolve_mode_for_arm("away")
         actor = self._authorize_arm(code, self._current_mode_id)
         if actor is None:
@@ -667,6 +718,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         )
 
     async def async_alarm_arm_home(self, code=None) -> None:
+        code = _clean_code(code)
         self._current_mode_id = self._resolve_mode_for_arm("home")
         actor = self._authorize_arm(code, self._current_mode_id)
         if actor is None:
@@ -682,6 +734,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         )
 
     async def async_alarm_arm_night(self, code=None) -> None:
+        code = _clean_code(code)
         self._current_mode_id = self._resolve_mode_for_arm("night")
         actor = self._authorize_arm(code, self._current_mode_id)
         if actor is None:
@@ -697,6 +750,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         )
 
     async def async_alarm_arm_vacation(self, code=None) -> None:
+        code = _clean_code(code)
         self._current_mode_id = self._resolve_mode_for_arm("vacation")
         actor = self._authorize_arm(code, self._current_mode_id)
         if actor is None:
@@ -759,6 +813,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 await self._async_run_scripts(CONF_ARMED_HOME_SCRIPTS, "armed_home")
 
     async def async_alarm_disarm(self, code=None) -> None:
+        code = _clean_code(code)
         panic = False
         actor = UNKNOWN
         if self._with_users():
@@ -842,6 +897,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 await self._async_run_transition_actions(prev, to_state, to_state)
 
     async def async_alarm_trigger(self, code=None) -> None:
+        code = _clean_code(code)
         actor = UNKNOWN
         if self._with_users():
             user = self._resolve_user_from_code(code)

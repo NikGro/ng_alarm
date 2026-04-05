@@ -54,6 +54,7 @@ class NGAlarmRuntime:
     store: Store
     config: dict[str, Any]
     entity: Any | None = None
+    entities: list[Any] | None = None
     event_sensor: Any | None = None
 
 
@@ -111,6 +112,12 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
         name = str(mode.get("name") or "").strip()
         icon = str(mode.get("icon") or "mdi:shield")
         arm_target = str(mode.get("arm_target") or "away").strip().lower()
+        arm_types = [
+            str(v).strip().lower()
+            for v in mode.get("arm_types", [arm_target])
+            if str(v).strip()
+        ]
+        arm_types = [v for v in arm_types if v in {"away", "home", "night", "vacation"}] or [arm_target if arm_target in {"away","home","night","vacation"} else "away"]
         require_code_to_arm = bool(mode.get("require_code_to_arm", True))
         bypass_mode = str(mode.get("bypass_mode") or "none").strip().lower()
         bypass_entities = [
@@ -146,6 +153,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                 "name": name,
                 "icon": icon,
                 "arm_target": arm_target,
+                "arm_types": arm_types,
                 "require_code_to_arm": require_code_to_arm,
                 "exit_delay": exit_delay,
                 "entry_delay": entry_delay,

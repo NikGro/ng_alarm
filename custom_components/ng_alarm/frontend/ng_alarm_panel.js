@@ -9,6 +9,14 @@ class HAPanelNGAlarm extends HTMLElement {
     this._activeTab = "general";
   }
 
+  _lang() {
+    return (this._hass && this._hass.language) ? String(this._hass.language).toLowerCase() : "en";
+  }
+
+  _t(en, de) {
+    return this._lang().startsWith("de") ? de : en;
+  }
+
   set hass(hass) {
     this._hass = hass;
     if (!this._initialized) {
@@ -22,6 +30,13 @@ class HAPanelNGAlarm extends HTMLElement {
     this.shadowRoot.querySelectorAll("ha-form, ha-selector").forEach((el) => {
       el.hass = hass;
     });
+
+    const subtitle = this.shadowRoot.getElementById("subtitle");
+    if (subtitle) subtitle.textContent = this._t("Configuration without legacy master codes", "Konfiguration ohne Legacy-Master-Codes");
+    const ge = this.shadowRoot.getElementById("general-empty");
+    if (ge) ge.textContent = this._t("(intentionally empty)", "(bewusst leer)");
+    const zh = this.shadowRoot.getElementById("zones-help");
+    if (zh) zh.textContent = this._t("Each zone can expose one or more native arm types and has its own delays/bypass settings.", "Jede Zone kann einen oder mehrere native Arming-Typen anbieten und hat eigene Delay-/Bypass-Einstellungen.");
   }
 
   set narrow(_narrow) {}
@@ -73,7 +88,9 @@ class HAPanelNGAlarm extends HTMLElement {
           cursor:pointer;
         }
         .btn.primary { border:none; background: var(--primary-color); color:white; font-weight:600; }
-        .btn.danger { border-color:#b00020; color:#b00020; margin-top: 10px; }
+        .btn.danger { border-color:#b00020; color:#b00020; margin-top: 0; }
+        .item .btn.danger { margin-top: 10px; }
+        #events .btn.danger { margin-top: 0; }
         #modes-add, #sensors-add, #users-add, #actions-add { margin-top: 10px; }
         #events-list .item { margin-bottom: 10px; line-height: 1.35; }
         hr.sep { border: none; border-top: 1px dashed var(--divider-color); margin: 8px 0; grid-column: 1 / -1; }
@@ -92,13 +109,14 @@ class HAPanelNGAlarm extends HTMLElement {
           <img class="logo" src="/ng_alarm_static/alarm_icon.jpg" alt="Alarm Icon" />
           <div>
             <h1>Alarm</h1>
-            <div class="muted">Konfiguration ohne Legacy-Master-Codes</div>
+            <div class="muted" id="subtitle"></div>
           </div>
+          <button id="open-sidebar" class="btn" type="button" style="margin-left:auto">☰ Open sidebar</button>
         </div>
 
         <div class="tabs">
           <button class="tab" data-tab="general">⚙️ General</button>
-          <button class="tab" data-tab="modes">🧩 Modes</button>
+          <button class="tab" data-tab="modes">🧩 Zones</button>
           <button class="tab" data-tab="sensors">🧲 Sensors</button>
           <button class="tab" data-tab="users">👤 Users</button>
           <button class="tab" data-tab="actions">🎬 Actions</button>
@@ -107,13 +125,13 @@ class HAPanelNGAlarm extends HTMLElement {
 
         <div id="general" class="section">
           <ha-card header="General Settings">
-            <div class="muted">(intentionally empty)</div>
+            <div class="muted" id="general-empty">(intentionally empty)</div>
           </ha-card>
         </div>
 
         <div id="modes" class="section">
-          <ha-card header="Zones (formerly Modes)">
-            <div class="muted">Jede Zone kann eigene Arming-Typen/Delays/Bypass-Konfiguration haben.</div>
+          <ha-card header="Zones">
+            <div class="muted" id="zones-help">Each zone can expose one or more native arm types and has its own delays/bypass settings.</div>
             <div id="modes-list" class="list" style="margin-top:10px"></div>
             <button id="modes-add" class="btn" type="button">+ Add zone</button>
           </ha-card>
@@ -167,13 +185,16 @@ class HAPanelNGAlarm extends HTMLElement {
 
   _bindEvents() {
     this.shadowRoot.getElementById("save").addEventListener("click", () => this._saveConfig());
+    this.shadowRoot.getElementById("open-sidebar").addEventListener("click", () => {
+      this.dispatchEvent(new Event("hass-toggle-menu", { bubbles: true, composed: true }));
+    });
     this.shadowRoot.querySelectorAll(".tab").forEach((btn) => {
       btn.addEventListener("click", () => this._switchTab(btn.dataset.tab));
     });
 
     this.shadowRoot.getElementById("modes-add").addEventListener("click", () => {
       const modes = [...(this._data.modes || [])];
-      modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", require_code_to_arm: false, exit_delay: 60, entry_delay: 30, bypass_mode: "none", bypass_entities: [], bypass_template: "" });
+      modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", arm_types: ["away"], require_code_to_arm: false, exit_delay: 60, entry_delay: 30, bypass_mode: "none", bypass_entities: [], bypass_template: "" });
       this._data.modes = modes;
       this._renderModes();
     });
@@ -267,7 +288,7 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ text: {} }, mode.id || "", (v) => upd({ id: v }), "Zone ID"),
         this._sel({ text: {} }, mode.name || "", (v) => upd({ name: v }), "Zone name"),
         this._sel({ icon: {} }, mode.icon || "mdi:shield", (v) => upd({ icon: v }), "Zone icon"),
-        this._sel({ select: { mode: "dropdown", options: [{ value: "away", label: "Away" }, { value: "home", label: "Home" }, { value: "night", label: "Night" }, { value: "vacation", label: "Vacation" }] } }, mode.arm_target || "away", (v) => upd({ arm_target: v }), "Arm type"),
+        this._sel({ select: { multiple: true, mode: "dropdown", options: [{ value: "away", label: "Away" }, { value: "home", label: "Home" }, { value: "night", label: "Night" }, { value: "vacation", label: "Vacation" }] } }, mode.arm_types || [mode.arm_target || "away"], (v) => upd({ arm_types: v || [] }), "Arm types available in this zone"),
         this._sel({ boolean: {} }, !!mode.require_code_to_arm, (v) => upd({ require_code_to_arm: !!v }), "Code required for arming"),
         this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, mode.exit_delay ?? 60, (v) => upd({ exit_delay: Number(v || 0) }), "Exit delay"),
         this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, mode.entry_delay ?? 30, (v) => upd({ entry_delay: Number(v || 0) }), "Pending (entry) delay"),
