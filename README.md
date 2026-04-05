@@ -7,11 +7,17 @@ Custom Home Assistant alarm integration with a native editable configuration pag
 - `alarm_control_panel` backend with modes `armed_away` and `armed_home`
 - Independent entry/exit delays per mode
 - Sensor groups: away/home active + away/home bypass
-- Bypass condition: if any bypass entity matches bypass state, bypass sensors are silenced
-- Script-based actions (`pending`, `triggered`, `armed_*`, `disarmed`, `panic`)
-- Panic code support (silent panic scripts)
+- Trigger-state controls per mode (`away_trigger_states`, `home_trigger_states`)
+- Unknown/unavailable sensor handling flags
+- Bypass condition modes:
+  - **Entity state mode** (`bypass_entities` + `bypass_state`)
+  - **Template mode** (`bypass_template`)
+- Users & code permissions (`can_arm`, `can_disarm`, `can_panic`)
+- Action Builder rules (`from` / `to` / `through`) with script targets
+- Legacy state scripts (`pending`, `triggered`, `armed_*`, `disarmed`, `panic`)
+- Event log panel with clear/refresh API
 - Runtime state persistence across restart
-- Native sidebar page **NG Alarm** for editing config live
+- Native HA-style sidebar page with tabbed editor
 
 ## Install (HACS)
 

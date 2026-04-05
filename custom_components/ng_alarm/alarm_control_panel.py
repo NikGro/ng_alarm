@@ -522,9 +522,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 await self._async_log_event("denied", "Denied disarm: unknown user code")
                 return
             actor = self._actor_name(user)
-            if bool(user.get(CONF_USER_CAN_PANIC, False)):
-                panic = True
-            elif not bool(user.get(CONF_USER_CAN_DISARM, False)):
+            if not bool(user.get(CONF_USER_CAN_DISARM, False)):
                 await self._async_log_event("denied", "Denied disarm: missing disarm permission")
                 return
         else:
@@ -557,11 +555,27 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             await self._async_run_scripts(CONF_DISARMED_SCRIPTS, "disarmed")
 
     async def async_alarm_trigger(self, code=None) -> None:
+        actor = UNKNOWN
+        if self._with_users():
+            user = self._resolve_user_from_code(code)
+            if not user or not bool(user.get(CONF_USER_CAN_PANIC, False)):
+                await self._async_log_event("denied", "Denied trigger: missing panic permission")
+                return
+            actor = self._actor_name(user)
+        else:
+            panic_code = str(self._config.get(CONF_PANIC_CODE, ""))
+            alarm_code = str(self._config.get(CONF_ALARM_CODE, ""))
+            required = panic_code or alarm_code
+            if required and not self._code_ok(code, required):
+                await self._async_log_event("denied", "Denied trigger: invalid code")
+                return
+
         if self._alarm_state in (
             AlarmControlPanelState.ARMED_AWAY,
             AlarmControlPanelState.ARMED_HOME,
             AlarmControlPanelState.PENDING,
         ):
+            self._last_actor = actor
             prev = _state_str(self._alarm_state)
             self._alarm_state = AlarmControlPanelState.TRIGGERED
             self.async_write_ha_state()

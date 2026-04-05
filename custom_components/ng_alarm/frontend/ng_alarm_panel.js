@@ -168,7 +168,8 @@ class HAPanelNGAlarm extends HTMLElement {
   }
 
   _schemaGeneral() {
-    return [
+    const mode = this._data.bypass_mode || "entity_state";
+    const schema = [
       { name: "name", selector: { text: {} } },
       { name: "alarm_code", selector: { text: { type: "password" } } },
       { name: "panic_code", selector: { text: { type: "password" } } },
@@ -188,10 +189,16 @@ class HAPanelNGAlarm extends HTMLElement {
           },
         },
       },
-      { name: "bypass_entities", selector: { entity: { multiple: true } } },
-      { name: "bypass_state", selector: { text: {} } },
-      { name: "bypass_template", selector: { template: {} } },
     ];
+
+    if (mode === "template") {
+      schema.push({ name: "bypass_template", selector: { template: {} } });
+    } else {
+      schema.push({ name: "bypass_entities", selector: { entity: { multiple: true } } });
+      schema.push({ name: "bypass_state", selector: { text: {} } });
+    }
+
+    return schema;
   }
 
   _schemaSensors() {
@@ -255,18 +262,11 @@ class HAPanelNGAlarm extends HTMLElement {
   }
 
   _refreshBypassModeFields() {
-    const mode = this._data.bypass_mode || "entity_state";
-    const showTemplate = mode === "template";
-    const shouldShow = (name) => {
-      if (name === "bypass_template") return showTemplate;
-      if (name === "bypass_entities" || name === "bypass_state") return !showTemplate;
-      return true;
-    };
-
-    this.shadowRoot.querySelectorAll("#form-general [data-path]").forEach((row) => {
-      const path = row.getAttribute("data-path");
-      row.style.display = shouldShow(path) ? "" : "none";
-    });
+    const form = this.shadowRoot.getElementById("form-general");
+    if (!form) return;
+    form.schema = this._schemaGeneral();
+    form.data = this._data;
+    form.hass = this._hass;
   }
 
   _createSelector(selector, value, onValueChanged, label = "") {
