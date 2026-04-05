@@ -1202,6 +1202,7 @@ class HAPanelNGAlarm extends HTMLElement {
         by: "test_user",
         triggered_sensor: "binary_sensor.test_sensor",
         triggered_sensor_name: "Test Sensor",
+        pending_seconds: 30,
       };
       for (const entityId of targets) {
         const [domain] = String(entityId || "").split(".", 1);

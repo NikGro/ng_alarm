@@ -494,6 +494,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         from_state: str,
         to_state: str,
         alarm_state: str,
+        pending_seconds: int | None = None,
     ) -> None:
         through_state = self._current_mode_id if self._current_mode_id != UNKNOWN else (_state_str(self._armed_mode) if self._armed_mode else UNKNOWN)
         through_mode = str(self._current_arm_type or UNKNOWN)
@@ -507,6 +508,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             "arm_type": through_mode,
             "from_state": from_state,
             "to_state": to_state,
+            "pending_seconds": int(pending_seconds or 0),
         }
         for action in self._config.get(CONF_ACTIONS, []):
             if not isinstance(action, dict):
@@ -545,7 +547,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                         blocking=False,
                     )
 
-    async def _async_run_scripts(self, key: str, alarm_state: str) -> None:
+    async def _async_run_scripts(self, key: str, alarm_state: str, pending_seconds: int | None = None) -> None:
         variables = {
             ATTR_TRIGGERED_SENSOR: self._triggered_sensor,
             ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
@@ -554,6 +556,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             ATTR_ACTOR: self._last_actor,
             "zone": self._zone_id or "main",
             "arm_type": self._current_arm_type,
+            "pending_seconds": int(pending_seconds or 0),
         }
         for entity_id in self._config.get(key, []):
             await self.hass.services.async_call(
@@ -795,8 +798,6 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             f"Sensor {self._triggered_sensor_name} triggered pending state",
             sensor=self._triggered_sensor,
         )
-        await self._async_run_transition_actions(prev, "pending", "pending")
-        await self._async_run_scripts(CONF_PENDING_SCRIPTS, "pending")
 
         delay = self._mode_delay(
             "entry_delay",
@@ -809,6 +810,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 )
             ),
         )
+        await self._async_run_transition_actions(prev, "pending", "pending", pending_seconds=delay)
+        await self._async_run_scripts(CONF_PENDING_SCRIPTS, "pending", pending_seconds=delay)
         self._cancel_timers()
         self._entry_unsub = async_call_later(self.hass, delay, self._async_finish_entry_delay)
 
