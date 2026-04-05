@@ -1136,21 +1136,22 @@ class HAPanelNGAlarm extends HTMLElement {
       test.className = "btn pill-gray";
       test.type = "button";
       test.textContent = this._t("Test action", "Aktion testen");
-      const testResult = document.createElement("span");
-      testResult.className = "inline-test-result";
       test.addEventListener("click", async () => {
         const current = (this._data.actions || [])[idx] || {};
         const ok = await this._runActionTest(current);
-        testResult.classList.remove("ok", "err");
-        testResult.classList.add(ok ? "ok" : "err");
-        testResult.textContent = ok ? this._t("Executed", "Ausgeführt") : this._t("Failed", "Fehlgeschlagen");
+        this._flashButtonText(
+          test,
+          ok ? this._t("Test sent", "Test gesendet") : this._t("Failed", "Fehlgeschlagen"),
+          1400,
+          this._t("Test action", "Aktion testen")
+        );
       });
 
       const btnRow = document.createElement("div");
       btnRow.className = "sensor-btn-row";
       const btnTop = document.createElement("div");
       btnTop.className = "sensor-btn-top";
-      btnTop.append(test, testResult);
+      btnTop.append(test);
       const btnDelete = document.createElement("div");
       btnDelete.className = "sensor-btn-delete";
       btnDelete.append(del);
