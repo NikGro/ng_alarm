@@ -468,6 +468,19 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             return str(user.get(CONF_USER_NAME, "") or "user")
         return UNKNOWN
 
+    async def _resolve_ui_actor(self) -> str:
+        """Return UI actor label from HA request context when available."""
+        ctx = getattr(self, "_context", None)
+        user_id = getattr(ctx, "user_id", None)
+        if not user_id:
+            return "UI"
+        try:
+            user = await self.hass.auth.async_get_user(user_id)
+            name = getattr(user, "name", None) or user_id
+        except Exception:  # noqa: BLE001
+            name = user_id
+        return f"UI ({name})"
+
     def _action_matches(self, filters: list[str], value: str) -> bool:
         if not filters:
             return True
@@ -850,6 +863,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if actor is None:
             await self._async_log_event("denied", "Denied arm away: code/permission/mode mismatch")
             return
+        if actor == UNKNOWN:
+            actor = await self._resolve_ui_actor()
         self._last_actor = actor
         if self._current_mode_id == UNKNOWN:
             await self._async_log_event("denied", "Denied arm away: no modes configured")
@@ -867,6 +882,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if actor is None:
             await self._async_log_event("denied", "Denied arm home: code/permission/mode mismatch")
             return
+        if actor == UNKNOWN:
+            actor = await self._resolve_ui_actor()
         self._last_actor = actor
         if self._current_mode_id == UNKNOWN:
             await self._async_log_event("denied", "Denied arm home: no modes configured")
@@ -884,6 +901,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if actor is None:
             await self._async_log_event("denied", "Denied arm night: code/permission/mode mismatch")
             return
+        if actor == UNKNOWN:
+            actor = await self._resolve_ui_actor()
         self._last_actor = actor
         if self._current_mode_id == UNKNOWN:
             await self._async_log_event("denied", "Denied arm night: no modes configured")
@@ -901,6 +920,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if actor is None:
             await self._async_log_event("denied", "Denied arm vacation: code/permission/mode mismatch")
             return
+        if actor == UNKNOWN:
+            actor = await self._resolve_ui_actor()
         self._last_actor = actor
         if self._current_mode_id == UNKNOWN:
             await self._async_log_event("denied", "Denied arm vacation: no modes configured")
