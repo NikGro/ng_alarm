@@ -50,7 +50,12 @@ class HAPanelNGAlarm extends HTMLElement {
   _renderShell() {
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display:block; height:100%; box-sizing:border-box; }
+        :host {
+          display:block;
+          height:100%;
+          box-sizing:border-box;
+          background: var(--primary-background-color);
+        }
         .wrap { padding: 0 12px 12px; max-width: 980px; margin: 0 auto; color: var(--primary-text-color); }
         .head-native {
           display:flex;
@@ -66,6 +71,8 @@ class HAPanelNGAlarm extends HTMLElement {
           height: 40px;
           padding: 0;
           border-radius: 999px;
+          border: none;
+          background: transparent;
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -124,10 +131,10 @@ class HAPanelNGAlarm extends HTMLElement {
         hr.sep { border: none; border-top: 1px dashed var(--divider-color); margin: 8px 0; grid-column: 1 / -1; }
 
         .footer { display:flex; align-items:center; gap:10px; margin-top: 10px; }
-        .card-subtitle { padding-left: 12px; }
+        .card-subtitle { padding-left: 0; }
 
         @media (max-width: 800px) {
-          .wrap { max-width: 100%; padding: 10px; }
+          .wrap { max-width: 100%; padding: 0 10px 10px; }
           .row { grid-template-columns: 1fr; }
           .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
@@ -159,6 +166,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
         <div id="general" class="section">
           <ha-card header="General Settings">
+            <div class="muted" style="margin-bottom:8px">Choose how users enter their code in the alarm panel.</div>
             <div id="general-settings-list" class="list"></div>
           </ha-card>
         </div>
@@ -190,6 +198,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
         <div id="users" class="section">
           <ha-card header="Users & Codes">
+            <div class="muted" style="margin-bottom:8px">Manage users, permissions and which zones each code may control.</div>
             <div id="users-list" class="list"></div>
             <button id="users-add" class="btn" type="button">+ Add user</button>
           </ha-card>
@@ -197,6 +206,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
         <div id="actions" class="section">
           <ha-card header="Action Builder">
+            <div class="muted" style="margin-bottom:8px">Define what should run when the alarm changes state.</div>
             <div id="actions-list" class="list"></div>
             <button id="actions-add" class="btn" type="button">+ Add action</button>
             <div class="muted card-subtitle" style="margin-top:10px">
@@ -207,6 +217,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
         <div id="events" class="section">
           <ha-card header="Event Log">
+            <div class="muted" style="margin-bottom:8px">Review alarm history across all zones and export or clear entries.</div>
             <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
               <label class="muted" for="events-zone" style="margin-right:4px">Zone</label>
               <select id="events-zone" class="btn" style="min-width:140px">
