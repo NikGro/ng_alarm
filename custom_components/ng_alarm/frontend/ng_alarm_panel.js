@@ -61,6 +61,15 @@ class HAPanelNGAlarm extends HTMLElement {
           background: var(--app-header-background-color, var(--card-background-color));
           border-bottom: 1px solid var(--divider-color);
         }
+        .menu-btn {
+          width: 40px;
+          height: 40px;
+          padding: 0;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
         .brand { display:flex; align-items:center; gap:10px; margin-bottom: 12px; }
         .logo { width:40px; height:40px; border-radius:10px; object-fit:cover; border:1px solid var(--divider-color); }
         h1 { margin:0; font-size: 24px; }
@@ -106,6 +115,7 @@ class HAPanelNGAlarm extends HTMLElement {
           cursor:pointer;
         }
         .btn.primary { border:none; background: var(--primary-color); color:white; font-weight:600; border-radius: 999px; }
+        .btn-save { min-height: 44px; padding: 10px 18px; font-size: 1rem; }
         .btn.danger { border-color:#b00020; color:#b00020; margin-top: 0; }
         .item .btn.danger { margin-top: 10px; }
         #events .btn.danger { margin-top: 0; }
@@ -114,6 +124,7 @@ class HAPanelNGAlarm extends HTMLElement {
         hr.sep { border: none; border-top: 1px dashed var(--divider-color); margin: 8px 0; grid-column: 1 / -1; }
 
         .footer { display:flex; align-items:center; gap:10px; margin-top: 10px; }
+        .card-subtitle { padding-left: 12px; }
 
         @media (max-width: 800px) {
           .wrap { max-width: 100%; padding: 10px; }
@@ -124,7 +135,9 @@ class HAPanelNGAlarm extends HTMLElement {
 
       <div class="wrap">
         <div class="head-native">
-          <ha-menu-button id="open-sidebar"></ha-menu-button>
+          <button id="open-sidebar" class="btn menu-btn" type="button" title="Open sidebar" aria-label="Open sidebar">
+            <ha-icon icon="mdi:menu"></ha-icon>
+          </button>
         </div>
 
         <div class="brand">
@@ -152,7 +165,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
         <div id="modes" class="section">
           <ha-card header="Zones">
-            <div class="muted" id="zones-help">Each zone can expose one or more native arm types and has its own delays/bypass settings.</div>
+            <div class="muted card-subtitle" id="zones-help">Each zone can expose one or more native arm types and has its own delays/bypass settings.</div>
             <div id="modes-list" class="list" style="margin-top:10px"></div>
             <button id="modes-add" class="btn" type="button">+ Add zone</button>
           </ha-card>
@@ -160,12 +173,12 @@ class HAPanelNGAlarm extends HTMLElement {
 
         <div id="sensors" class="section">
           <ha-card header="Global Bypass Rules">
-            <div class="muted">Global bypass elements can be reused by multiple sensors.</div>
+            <div class="muted card-subtitle">Global bypass elements can be reused by multiple sensors.</div>
             <div id="global-bypass-list" class="list" style="margin-top:10px"></div>
             <button id="global-bypass-add" class="btn" type="button">+ Add global bypass</button>
           </ha-card>
           <ha-card header="Sensors">
-            <div class="muted">Per sensor zones, bypass and trigger flags</div>
+            <div class="muted card-subtitle">Per sensor zones, bypass and trigger flags</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
               <button id="sensors-add-all-motion" class="btn" type="button">+ Add all motion / occupancy</button>
               <button id="sensors-add-all-door" class="btn" type="button">+ Add all door / window</button>
@@ -186,7 +199,7 @@ class HAPanelNGAlarm extends HTMLElement {
           <ha-card header="Action Builder">
             <div id="actions-list" class="list"></div>
             <button id="actions-add" class="btn" type="button">+ Add action</button>
-            <div class="muted" style="margin-top:10px">
+            <div class="muted card-subtitle" style="margin-top:10px">
               Script/target variables available: <code>from_state</code>, <code>to_state</code>, <code>alarm_mode</code>, <code>zone</code>, <code>arm_type</code>, <code>actor</code>, <code>triggered_sensor</code>, <code>triggered_sensor_name</code>.
             </div>
           </ha-card>
@@ -209,7 +222,7 @@ class HAPanelNGAlarm extends HTMLElement {
         </div>
 
         <div class="footer">
-          <button id="save" class="btn primary">Save & Reload</button>
+          <button id="save" class="btn primary btn-save">Save & Reload</button>
           <div class="muted" id="status"></div>
         </div>
       </div>
