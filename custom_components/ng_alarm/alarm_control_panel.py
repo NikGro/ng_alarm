@@ -292,6 +292,9 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             "state": _state_str(self._alarm_state),
             "mode": _state_str(self._armed_mode) if self._armed_mode else UNKNOWN,
             "actor": self._last_actor,
+            "from_state": meta.get("from_state", UNKNOWN),
+            "to_state": meta.get("to_state", _state_str(self._alarm_state)),
+            "by": meta.get("by", self._last_actor),
         }
         entry.update({k: v for k, v in meta.items() if v is not None})
         self._event_log.append(entry)
@@ -676,7 +679,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._alarm_state = AlarmControlPanelState.TRIGGERED
         self.async_write_ha_state()
         await self._async_persist_runtime()
-        await self._async_log_event("triggered", "Alarm switched to TRIGGERED")
+        await self._async_log_event(
+            "triggered",
+            "Alarm switched to TRIGGERED",
+            from_state=prev,
+            to_state="triggered",
+            by=self._last_actor,
+        )
         await self._async_run_transition_actions(prev, "triggered", "triggered")
         await self._async_run_scripts(CONF_TRIGGERED_SCRIPTS, "triggered")
         self._schedule_alarm_timeout()
@@ -689,7 +698,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         await self._async_persist_runtime()
         self._async_refresh_sensor_listener()
         to_state = _state_str(self._alarm_state)
-        await self._async_log_event("armed", f"Alarm armed as {to_state}")
+        await self._async_log_event(
+            "armed",
+            f"Alarm armed as {to_state}",
+            from_state=prev,
+            to_state=to_state,
+            by=self._last_actor,
+        )
         await self._async_run_transition_actions(prev, to_state, to_state)
 
         arm_target = str((self._mode_config() or {}).get("arm_target", "")).lower()
@@ -791,6 +806,9 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             await self._async_log_event(
                 "arm_blocked",
                 "Arming blocked due to open sensors",
+                from_state=prev,
+                to_state=prev,
+                by=self._last_actor,
                 sensors=blocking,
             )
             return
@@ -799,7 +817,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self.async_write_ha_state()
         await self._async_persist_runtime()
         to_state = _state_str(self._alarm_state)
-        await self._async_log_event("arming", f"Alarm changed to {to_state}")
+        await self._async_log_event(
+            "arming",
+            f"Alarm changed to {to_state}",
+            from_state=prev,
+            to_state=to_state,
+            by=self._last_actor,
+        )
         await self._async_run_transition_actions(prev, to_state, to_state)
 
         if delay > 0:
@@ -850,7 +874,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._triggered_sensor_name = UNKNOWN
         self.async_write_ha_state()
         await self._async_persist_runtime()
-        await self._async_log_event("panic" if panic else "disarmed", "Alarm disarmed")
+        await self._async_log_event(
+            "panic" if panic else "disarmed",
+            "Alarm disarmed",
+            from_state="triggered" if panic else prev,
+            to_state="disarmed",
+            by=self._last_actor,
+        )
         await self._async_run_transition_actions(prev, "disarmed", "panic" if panic else "disarmed")
 
         if panic:
@@ -872,7 +902,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if self._alarm_state != AlarmControlPanelState.TRIGGERED:
             return
         action = self._mode_timeout_action()
-        await self._async_log_event("alarm_timeout", f"Alarm duration elapsed (action={action})")
+        await self._async_log_event(
+            "alarm_timeout",
+            f"Alarm duration elapsed (action={action})",
+            from_state="triggered",
+            to_state="triggered",
+            by=self._last_actor,
+        )
         if action == "disarm":
             prev = _state_str(self._alarm_state)
             self._alarm_state = AlarmControlPanelState.DISARMED
@@ -921,7 +957,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._alarm_state = AlarmControlPanelState.TRIGGERED
             self.async_write_ha_state()
             await self._async_persist_runtime()
-            await self._async_log_event("triggered", "Alarm triggered manually")
+            await self._async_log_event(
+                "triggered",
+                "Alarm triggered manually",
+                from_state=prev,
+                to_state="triggered",
+                by=self._last_actor,
+            )
             await self._async_run_transition_actions(prev, "triggered", "triggered")
             await self._async_run_scripts(CONF_TRIGGERED_SCRIPTS, "triggered")
             self._schedule_alarm_timeout()

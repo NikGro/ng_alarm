@@ -50,13 +50,19 @@ class NGAlarmEventLogSensor(SensorEntity):
         if not events:
             return "no_events"
         last = events[-1]
-        txt = f"{last.get('event','event')} | {last.get('message','')}"
+        from_state = str(last.get("from_state") or "unknown")
+        to_state = str(last.get("to_state") or str(last.get("state") or "unknown"))
+        by_actor = str(last.get("by") or last.get("actor") or "unknown")
+        txt = f"{from_state} -> {to_state} by {by_actor}"
         return txt[:255]
 
     @property
     def extra_state_attributes(self):
         events = self._all_events()
         last = events[-1] if events else {}
+        from_state = str(last.get("from_state") or "unknown")
+        to_state = str(last.get("to_state") or str(last.get("state") or "unknown"))
+        by_actor = str(last.get("by") or last.get("actor") or "unknown")
         return {
             "event_count": len(events),
             "last_event": last.get("event"),
@@ -65,4 +71,8 @@ class NGAlarmEventLogSensor(SensorEntity):
             "last_mode": last.get("mode"),
             "last_ts": last.get("ts"),
             "enabled": bool(self._runtime.config.get(CONF_EXPOSE_EVENT_LOG_SENSOR, False)),
+            "from_state": from_state,
+            "to_state": to_state,
+            "by": by_actor,
+            "summary_text": f"{from_state} -> {to_state} by {by_actor}",
         }
