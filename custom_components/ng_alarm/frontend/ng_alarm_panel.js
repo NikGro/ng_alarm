@@ -11,6 +11,7 @@ class HAPanelNGAlarm extends HTMLElement {
     this._openZoneDetails = {};
     this._openGlobalBypassDetails = {};
     this._sensorConfigClipboard = null;
+    this._sensorDropIndicator = null;
     this._autosaveTimer = null;
     this._autosaveInFlight = false;
     this._configLoaded = false;
@@ -164,6 +165,10 @@ class HAPanelNGAlarm extends HTMLElement {
         #status.status-error { color: #b00020; font-weight: 600; }
         .action-btn-row { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top: 10px; flex-wrap: wrap; }
         .action-btn-row .btn { min-width: 170px; min-height: 40px; justify-content: center; border-radius: 999px; }
+        .global-btn-row { margin-top: 12px; }
+        .global-btn-top { display:flex; justify-content:center; gap:8px; align-items:center; flex-wrap: wrap; }
+        .global-btn-top .btn { min-width: 132px; min-height: 38px; border-radius: 999px; }
+        .global-btn-delete { margin-top: 10px; display:flex; justify-content:flex-start; }
         .inline-test-result { font-size: 0.9rem; color: var(--secondary-text-color); }
         .inline-test-result.ok { color: #1b8f3a; font-weight: 600; }
         .inline-test-result.err { color: #b00020; font-weight: 600; }
@@ -674,7 +679,7 @@ class HAPanelNGAlarm extends HTMLElement {
       }
 
       const test = document.createElement("button");
-      test.className = "btn";
+      test.className = "btn primary";
       test.type = "button";
       test.textContent = "Test condition";
       const testResult = document.createElement("span");
@@ -701,8 +706,14 @@ class HAPanelNGAlarm extends HTMLElement {
       });
 
       const btnRow = document.createElement("div");
-      btnRow.className = "action-btn-row";
-      btnRow.append(del, test, testResult);
+      btnRow.className = "global-btn-row";
+      const btnTop = document.createElement("div");
+      btnTop.className = "global-btn-top";
+      btnTop.append(test, testResult);
+      const btnDelete = document.createElement("div");
+      btnDelete.className = "global-btn-delete";
+      btnDelete.append(del);
+      btnRow.append(btnTop, btnDelete);
 
       details.appendChild(row);
       details.appendChild(btnRow);
@@ -752,29 +763,45 @@ class HAPanelNGAlarm extends HTMLElement {
         ev.dataTransfer.effectAllowed = "move";
         ev.dataTransfer.setData("text/plain", String(idx));
         item.classList.add("dragging");
+        this._sensorDropIndicator = null;
       });
       item.addEventListener("dragend", () => {
         item.classList.remove("dragging");
         host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
+        this._sensorDropIndicator = null;
       });
       item.addEventListener("dragover", (ev) => {
         ev.preventDefault();
         ev.dataTransfer.dropEffect = "move";
         const rect = item.getBoundingClientRect();
-        const before = ev.clientY < rect.top + rect.height / 2;
+        const upper = rect.top + rect.height * 0.35;
+        const lower = rect.top + rect.height * 0.65;
+        let before = true;
+        if (ev.clientY <= upper) before = true;
+        else if (ev.clientY >= lower) before = false;
+        else if (this._sensorDropIndicator && this._sensorDropIndicator.idx === idx) before = this._sensorDropIndicator.before;
+        else before = ev.clientY < rect.top + rect.height / 2;
+
+        const changed = !this._sensorDropIndicator
+          || this._sensorDropIndicator.idx !== idx
+          || this._sensorDropIndicator.before !== before;
+        if (!changed) return;
+
+        this._sensorDropIndicator = { idx, before };
         host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
         item.classList.add(before ? "drag-over-before" : "drag-over-after");
       });
       item.addEventListener("dragleave", () => {
-        item.classList.remove("drag-over-before", "drag-over-after");
+        // Keep marker stable; it will be replaced on next dragover or cleared on dragend/drop.
       });
       item.addEventListener("drop", (ev) => {
         ev.preventDefault();
         const from = Number(ev.dataTransfer.getData("text/plain"));
         const to = Number(item.dataset.index);
         if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
-        const rect = item.getBoundingClientRect();
-        const before = ev.clientY < rect.top + rect.height / 2;
+        const before = this._sensorDropIndicator && this._sensorDropIndicator.idx === to
+          ? this._sensorDropIndicator.before
+          : ev.clientY < (item.getBoundingClientRect().top + item.getBoundingClientRect().height / 2);
         const rules = [...(this._data.sensor_rules || [])];
         const [moved] = rules.splice(from, 1);
         let insertAt = to;
@@ -785,6 +812,7 @@ class HAPanelNGAlarm extends HTMLElement {
         rules.splice(insertAt, 0, moved);
         this._data.sensor_rules = rules;
         host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
+        this._sensorDropIndicator = null;
         this._renderSensors();
         this._scheduleAutosave();
       });
@@ -893,7 +921,7 @@ class HAPanelNGAlarm extends HTMLElement {
       });
 
       const copyBtn = document.createElement("button");
-      copyBtn.className = "btn";
+      copyBtn.className = "btn primary";
       copyBtn.type = "button";
       copyBtn.textContent = "Copy config";
       copyBtn.addEventListener("click", () => {
@@ -910,7 +938,7 @@ class HAPanelNGAlarm extends HTMLElement {
       });
 
       const pasteBtn = document.createElement("button");
-      pasteBtn.className = "btn";
+      pasteBtn.className = "btn primary";
       pasteBtn.type = "button";
       pasteBtn.textContent = "Paste config";
       pasteBtn.addEventListener("click", () => {
@@ -919,6 +947,7 @@ class HAPanelNGAlarm extends HTMLElement {
           return;
         }
         upd({ ...this._sensorConfigClipboard });
+        this._renderSensors();
         this._status("Sensor config pasted.", "ok");
         this._scheduleAutosave();
       });
