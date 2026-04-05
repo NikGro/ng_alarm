@@ -13,10 +13,12 @@ from .const import (
     CONF_ACTIONS,
     CONF_ACTION_BY_USER,
     CONF_ACTION_FROM,
+    CONF_ACTION_ICON,
     CONF_CODE_INPUT_MODE,
     CONF_ACTION_SCRIPTS,
     CONF_ACTION_TARGETS,
     CONF_ACTION_THROUGH,
+    CONF_ACTION_THROUGH_MODE,
     CONF_ACTION_TO,
     CONF_AWAY_TRIGGER_STATES,
     CONF_BYPASS_MODE,
@@ -124,6 +126,8 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
             continue
         mode_id = str(mode.get("id") or "").strip().lower().replace(" ", "_")
         name = str(mode.get("name") or "").strip()
+        if not mode_id and name:
+            mode_id = name.lower().replace(" ", "_")
         icon = str(mode.get("icon") or "mdi:shield")
         arm_target = str(mode.get("arm_target") or "away").strip().lower()
         arm_types = [
@@ -224,6 +228,8 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
             continue
         rid = str(rule.get("id") or "").strip().lower().replace(" ", "_")
         name = str(rule.get("name") or "").strip() or rid
+        if not rid and name:
+            rid = name.lower().replace(" ", "_")
         icon = str(rule.get("icon") or "mdi:swap-horizontal")
         mode = str(rule.get("mode") or "entity_state").strip().lower()
         entities = [str(v).strip() for v in rule.get("entities", []) if str(v).strip()]
@@ -330,7 +336,13 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                     for v in action.get(CONF_ACTION_THROUGH, [])
                     if str(v).strip()
                 ],
+                CONF_ACTION_THROUGH_MODE: [
+                    str(v).strip().lower()
+                    for v in action.get(CONF_ACTION_THROUGH_MODE, [])
+                    if str(v).strip()
+                ],
                 "name": str(action.get("name", "") or "").strip(),
+                CONF_ACTION_ICON: str(action.get(CONF_ACTION_ICON, "mdi:script-text-outline") or "mdi:script-text-outline").strip(),
                 CONF_ACTION_BY_USER: str(action.get(CONF_ACTION_BY_USER, "any") or "any").strip(),
                 CONF_ACTION_TARGETS: targets,
                 CONF_ACTION_SCRIPTS: targets,

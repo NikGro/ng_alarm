@@ -27,10 +27,12 @@ from .const import (
     CONF_ACTIONS,
     CONF_ACTION_BY_USER,
     CONF_ACTION_FROM,
+    CONF_ACTION_THROUGH_MODE,
     CONF_ACTION_SCRIPTS,
     CONF_ACTION_TARGETS,
     CONF_ACTION_THROUGH,
     CONF_ACTION_TO,
+    CONF_CODE_INPUT_MODE,
     CONF_ARMED_AWAY_SCRIPTS,
     CONF_ARMED_HOME_SCRIPTS,
     CONF_AWAY_ACTIVE_SENSORS,
@@ -155,6 +157,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._zone_id = _normalize_mode_id(zone_id) if zone_id else None
         self._store = Store(hass, 1, f"{STORAGE_KEY}.runtime.{self._zone_id or 'main'}")
         self._config = config
+        self._apply_code_format()
 
         zone_cfg = self._mode_config(self._zone_id) if self._zone_id else None
         zone_name = (zone_cfg or {}).get("name") if zone_cfg else None
@@ -176,6 +179,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._alarm_duration_unsub = None
         self._sensor_unsub = None
         self._bypass_unsub = None
+
+    def _apply_code_format(self) -> None:
+        mode = str(self._config.get(CONF_CODE_INPUT_MODE, "pin") or "pin").strip().lower()
+        self._attr_code_format = CodeFormat.TEXT if mode == "password" else CodeFormat.NUMBER
 
     @property
     def supported_features(self) -> AlarmControlPanelEntityFeature:
@@ -265,6 +272,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     async def async_reload_config(self, new_config: dict[str, Any]) -> None:
         self._config = new_config
+        self._apply_code_format()
         self._attr_name = self._config.get(CONF_NAME, "NG Alarm")
         await self._async_bind_bypass_listener()
         self._async_refresh_sensor_listener()
@@ -474,12 +482,15 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         alarm_state: str,
     ) -> None:
         through_state = self._current_mode_id if self._current_mode_id != UNKNOWN else (_state_str(self._armed_mode) if self._armed_mode else UNKNOWN)
+        through_mode = str(self._current_arm_type or UNKNOWN)
         variables = {
             ATTR_TRIGGERED_SENSOR: self._triggered_sensor,
             ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
             ATTR_ALARM_MODE: through_state,
             ATTR_ALARM_STATE: alarm_state,
             ATTR_ACTOR: self._last_actor,
+            "zone": self._zone_id or "main",
+            "arm_type": through_mode,
             "from_state": from_state,
             "to_state": to_state,
         }
@@ -491,6 +502,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             if not self._action_matches(action.get(CONF_ACTION_TO, []), to_state):
                 continue
             if not self._action_matches(action.get(CONF_ACTION_THROUGH, []), through_state):
+                continue
+            if not self._action_matches(action.get(CONF_ACTION_THROUGH_MODE, []), through_mode):
                 continue
             by_user = str(action.get(CONF_ACTION_BY_USER, "any") or "any").strip().lower()
             actor = str(self._last_actor).strip().lower()

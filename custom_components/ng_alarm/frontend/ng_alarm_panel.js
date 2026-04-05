@@ -20,6 +20,14 @@ class HAPanelNGAlarm extends HTMLElement {
     return this._lang().startsWith("de") ? de : en;
   }
 
+  _slugify(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_]/g, "");
+  }
+
   set hass(hass) {
     this._hass = hass;
     if (!this._initialized) {
@@ -109,7 +117,7 @@ class HAPanelNGAlarm extends HTMLElement {
         .section { display:none; }
         .section.active { display:block; }
 
-        ha-card { padding: 12px; margin-bottom: 12px; }
+        ha-card { padding: 12px 12px 12px 8px; margin-bottom: 12px; }
 
         .list { display:grid; gap:10px; }
         .item {
@@ -142,6 +150,8 @@ class HAPanelNGAlarm extends HTMLElement {
         .card-subtitle { padding-left: 0; }
         ha-card { --ha-card-header-padding: 8px 0 6px 0; }
         ha-card::part(header) { padding-left: 0 !important; padding-right: 0 !important; }
+        #status.status-ok { color: #1b8f3a; font-weight: 600; }
+        #status.status-error { color: #b00020; font-weight: 600; }
 
         @media (max-width: 800px) {
           .wrap { max-width: 100%; padding: 0 10px 10px; }
@@ -319,7 +329,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("actions-add").addEventListener("click", () => {
       const actions = [...(this._data.actions || [])];
-      actions.push({ name: "", from: ["any"], to: ["any"], through: ["any"], by_user: "any", targets: [] });
+      actions.push({ name: "", icon: "mdi:script-text-outline", from: ["any"], to: ["any"], through: ["any"], through_mode: ["any"], by_user: "any", targets: [] });
       this._data.actions = actions;
       this._renderActions();
     });
@@ -441,9 +451,7 @@ class HAPanelNGAlarm extends HTMLElement {
       const upd = (patch) => {
         const modes = [...(this._data.modes || [])];
         const next = { ...modes[idx], ...patch };
-        if (typeof next.id === "string") {
-          next.id = next.id.trim().toLowerCase().replace(/\s+/g, "_");
-        }
+        if ((!next.id || patch.name !== undefined) && next.name) next.id = this._slugify(next.name);
         modes[idx] = next;
         this._data.modes = modes;
         summary.innerHTML = `<ha-icon icon="${next.icon || "mdi:shield"}"></ha-icon> ${next.name || next.id || `Zone #${idx + 1}`}`;
@@ -455,7 +463,6 @@ class HAPanelNGAlarm extends HTMLElement {
 
       // Base section (ID/Name/Icon)
       row.append(
-        this._sel({ text: {} }, mode.id || "", (v) => upd({ id: v }), "Zone ID"),
         this._sel({ text: {} }, mode.name || "", (v) => upd({ name: v }), "Zone name"),
         this._sel({ icon: {} }, mode.icon || "mdi:shield", (v) => upd({ icon: v }), "Zone icon"),
         this._sel({ boolean: {} }, mode.require_code_to_arm !== false, (v) => upd({ require_code_to_arm: !!v }), "Code required for arming"),
@@ -555,14 +562,13 @@ class HAPanelNGAlarm extends HTMLElement {
       const upd = (patch) => {
         const arr = [...(this._data.global_bypass_rules || [])];
         const next = { ...arr[idx], ...patch };
-        if (typeof next.id === "string") next.id = next.id.trim().toLowerCase().replace(/\s+/g, "_");
+        if ((!next.id || patch.name !== undefined) && next.name) next.id = this._slugify(next.name);
         arr[idx] = next;
         this._data.global_bypass_rules = arr;
         summary.innerHTML = `<ha-icon icon="${next.icon || "mdi:swap-horizontal"}"></ha-icon> ${next.name || next.id || `Global bypass #${idx + 1}`}`;
       };
 
       row.append(
-        this._sel({ text: {} }, rule.id || "", (v) => upd({ id: v }), "ID"),
         this._sel({ text: {} }, rule.name || "", (v) => upd({ name: v }), "Name"),
         this._sel({ icon: {} }, rule.icon || "mdi:swap-horizontal", (v) => upd({ icon: v }), "Icon"),
         this._sel({ select: { mode: "dropdown", options: [{ value: "entity_state", label: "Entities" }, { value: "template", label: "Template" }] } }, rule.mode || "entity_state", (v) => { upd({ mode: v }); this._renderGlobalBypass(); }, "Rule type"),
@@ -731,7 +737,14 @@ class HAPanelNGAlarm extends HTMLElement {
       { value: "pending", label: "Pending" },
       { value: "triggered", label: "Triggered" },
     ];
-    const throughOptions = [{ value: "any", label: "Any" }, ...this._modeOptions()];
+    const throughZoneOptions = [{ value: "any", label: "Any" }, ...this._modeOptions()];
+    const throughModeOptions = [
+      { value: "any", label: "Any" },
+      { value: "away", label: "Away" },
+      { value: "home", label: "Home" },
+      { value: "night", label: "Night" },
+      { value: "vacation", label: "Vacation" },
+    ];
     const userOptions = [
       { value: "any", label: "Any user" },
       { value: "none", label: "None / sensor-triggered" },
@@ -747,7 +760,7 @@ class HAPanelNGAlarm extends HTMLElement {
       const details = document.createElement("details");
       details.open = !action.name;
       const summary = document.createElement("summary");
-      summary.textContent = action.name || `Action #${idx + 1}`;
+      summary.innerHTML = `<ha-icon icon="${action.icon || "mdi:script-text-outline"}"></ha-icon> ${action.name || `Action #${idx + 1}`}`;
       details.appendChild(summary);
 
       const row = document.createElement("div");
@@ -756,15 +769,18 @@ class HAPanelNGAlarm extends HTMLElement {
         const actions = [...(this._data.actions || [])];
         actions[idx] = { ...actions[idx], ...patch };
         this._data.actions = actions;
-        summary.textContent = actions[idx].name || `Action #${idx + 1}`;
+        const a = actions[idx];
+        summary.innerHTML = `<ha-icon icon="${a.icon || "mdi:script-text-outline"}"></ha-icon> ${a.name || `Action #${idx + 1}`}`;
       };
 
       row.append(
         this._sel({ text: {} }, action.name || "", (v) => upd({ name: v }), "Action name"),
+        this._sel({ icon: {} }, action.icon || "mdi:script-text-outline", (v) => upd({ icon: v }), "Icon"),
         this._sel({ select: { mode: "dropdown", options: stateOptions } }, (action.from || ["any"])[0] || "any", (v) => upd({ from: [v || "any"] }), "From state"),
         this._sel({ select: { mode: "dropdown", options: stateOptions } }, (action.to || ["any"])[0] || "any", (v) => upd({ to: [v || "any"] }), "To state"),
-        this._sel({ select: { mode: "dropdown", options: throughOptions } }, (action.through || ["any"])[0] || "any", (v) => upd({ through: [v || "any"] }), "Through mode"),
-        this._sel({ select: { mode: "dropdown", options: userOptions } }, action.by_user || "any", (v) => upd({ by_user: v || "any" }), "By user"),
+        this._sel({ select: { mode: "dropdown", options: throughZoneOptions } }, (action.through || ["any"])[0] || "any", (v) => upd({ through: [v || "any"] }), "Through zone"),
+        this._sel({ select: { mode: "dropdown", options: throughModeOptions } }, (action.through_mode || ["any"])[0] || "any", (v) => upd({ through_mode: [v || "any"] }), "Through mode"),
+        this._sel({ select: { mode: "dropdown", options: userOptions } }, action.by_user || "any", (v) => upd({ by_user: v || "any" }), "By"),
       );
       const sep = document.createElement("hr");
       sep.className = "sep";
@@ -818,9 +834,9 @@ class HAPanelNGAlarm extends HTMLElement {
       this._renderEventSensorToggle();
       this._updateHeaderVersion();
 
-      this._status("Configuration loaded.");
+      this._status("Configuration loaded.", "ok");
     } catch (err) {
-      this._status(`Load failed: ${err.message}`);
+      this._status(`Load failed: ${err.message}`, "error");
     }
   }
 
@@ -902,7 +918,7 @@ class HAPanelNGAlarm extends HTMLElement {
         host.appendChild(item);
       });
     } catch (err) {
-      this._status(`Events load failed: ${err.message}`);
+      this._status(`Events load failed: ${err.message}`, "error");
     }
   }
 
@@ -911,9 +927,9 @@ class HAPanelNGAlarm extends HTMLElement {
       await this._hass.callApi("post", "ng_alarm/events/clear", { zone: this._selectedEventZone || "all" });
       this._events = [];
       await this._loadEvents();
-      this._status("Event log cleared.");
+      this._status("Event log cleared.", "ok");
     } catch (err) {
-      this._status(`Event clear failed: ${err.message}`);
+      this._status(`Event clear failed: ${err.message}`, "error");
     }
   }
 
@@ -933,15 +949,19 @@ class HAPanelNGAlarm extends HTMLElement {
       delete payload.panic_code;
 
       await this._hass.callApi("post", "ng_alarm/config", payload);
-      this._status("Saved and runtime reloaded.");
+      this._status("Saved and runtime reloaded.", "ok");
     } catch (err) {
-      this._status(`Save failed: ${err.message}`);
+      this._status(`Save failed: ${err.message}`, "error");
     }
   }
 
-  _status(text) {
+  _status(text, level = "") {
     const s = this.shadowRoot.getElementById("status");
-    if (s) s.textContent = text;
+    if (!s) return;
+    s.textContent = text;
+    s.classList.remove("status-ok", "status-error");
+    if (level === "ok") s.classList.add("status-ok");
+    if (level === "error") s.classList.add("status-error");
   }
 }
 
