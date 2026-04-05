@@ -173,7 +173,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("modes-add").addEventListener("click", () => {
       const modes = [...(this._data.modes || [])];
-      modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", require_code_to_arm: true, exit_delay: 60, entry_delay: 30, bypass_mode: "none", bypass_entities: [], bypass_template: "" });
+      modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", require_code_to_arm: false, exit_delay: 60, entry_delay: 30, bypass_mode: "none", bypass_entities: [], bypass_template: "" });
       this._data.modes = modes;
       this._renderModes();
     });
@@ -431,7 +431,14 @@ class HAPanelNGAlarm extends HTMLElement {
       { value: "triggered", label: "Triggered" },
     ];
     const throughOptions = [{ value: "any", label: "Any" }, ...this._modeOptions()];
-    const userOptions = [{ value: "any", label: "Any user" }, ...(this._data.users || []).map((u) => ({ value: (u.name || "").trim().toLowerCase() || "any", label: u.name || "Unnamed" }))];
+    const userOptions = [
+      { value: "any", label: "Any user" },
+      { value: "none", label: "None / sensor-triggered" },
+      ...(this._data.users || []).map((u) => ({
+        value: (u.name || "").trim().toLowerCase() || "any",
+        label: u.name || "Unnamed",
+      })),
+    ];
 
     (this._data.actions || []).forEach((action, idx) => {
       const item = document.createElement("div");

@@ -117,13 +117,7 @@ async def async_setup_entry(
 class NGAlarmControlPanel(AlarmControlPanelEntity):
     """NG Alarm control panel implementation."""
 
-    _attr_supported_features = (
-        AlarmControlPanelEntityFeature.ARM_AWAY
-        | AlarmControlPanelEntityFeature.ARM_HOME
-        | FEATURE_ARM_NIGHT
-        | FEATURE_ARM_VACATION
-    )
-    _attr_code_format = CodeFormat.TEXT
+    _attr_code_format = CodeFormat.NUMBER
     _attr_code_arm_required = False
 
     def __init__(self, hass: HomeAssistant, config: dict[str, Any]) -> None:
@@ -146,6 +140,25 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._alarm_duration_unsub = None
         self._sensor_unsub = None
         self._bypass_unsub = None
+
+    @property
+    def supported_features(self) -> AlarmControlPanelEntityFeature:
+        """Expose only arm modes that are actually configured."""
+        features = AlarmControlPanelEntityFeature(0)
+        targets = {
+            str(m.get("arm_target", "")).strip().lower()
+            for m in (self._config.get(CONF_MODES, []) or [])
+            if isinstance(m, dict)
+        }
+        if "away" in targets or "vacation" in targets:
+            features |= AlarmControlPanelEntityFeature.ARM_AWAY
+        if "home" in targets or "night" in targets:
+            features |= AlarmControlPanelEntityFeature.ARM_HOME
+        if "night" in targets and FEATURE_ARM_NIGHT:
+            features |= AlarmControlPanelEntityFeature(FEATURE_ARM_NIGHT)
+        if "vacation" in targets and FEATURE_ARM_VACATION:
+            features |= AlarmControlPanelEntityFeature(FEATURE_ARM_VACATION)
+        return features
 
     @property
     def alarm_state(self) -> AlarmControlPanelState:
@@ -357,7 +370,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             if not self._action_matches(action.get(CONF_ACTION_THROUGH, []), through_state):
                 continue
             by_user = str(action.get(CONF_ACTION_BY_USER, "any") or "any").strip().lower()
-            if by_user not in {"", "any"} and by_user != str(self._last_actor).strip().lower():
+            actor = str(self._last_actor).strip().lower()
+            if by_user in {"none", "sensor"} and actor not in {"", "unknown", "none"}:
+                continue
+            if by_user not in {"", "any", "none", "sensor"} and by_user != actor:
                 continue
 
             for entity_id in action.get(CONF_ACTION_TARGETS, action.get(CONF_ACTION_SCRIPTS, [])):
