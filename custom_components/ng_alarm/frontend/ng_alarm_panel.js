@@ -93,7 +93,7 @@ class HAPanelNGAlarm extends HTMLElement {
         .btn.danger { border-color:#b00020; color:#b00020; margin-top: 0; }
         .item .btn.danger { margin-top: 10px; }
         #events .btn.danger { margin-top: 0; }
-        #modes-add, #sensors-add, #users-add, #actions-add { margin-top: 10px; }
+        #modes-add, #global-bypass-add, #sensors-add, #users-add, #actions-add { margin-top: 10px; }
         #events-list .item { margin-bottom: 10px; line-height: 1.35; }
         hr.sep { border: none; border-top: 1px dashed var(--divider-color); margin: 8px 0; grid-column: 1 / -1; }
 
@@ -149,6 +149,10 @@ class HAPanelNGAlarm extends HTMLElement {
           </ha-card>
           <ha-card header="Sensors">
             <div class="muted">Per sensor zones, bypass and trigger flags</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+              <button id="sensors-add-all-motion" class="btn" type="button">+ Add all motion / occupancy</button>
+              <button id="sensors-add-all-door" class="btn" type="button">+ Add all door / window</button>
+            </div>
             <div id="sensors-list" class="list" style="margin-top:10px"></div>
             <button id="sensors-add" class="btn" type="button">+ Add sensor</button>
           </ha-card>
@@ -224,6 +228,38 @@ class HAPanelNGAlarm extends HTMLElement {
       const rules = [...(this._data.sensor_rules || [])];
       rules.push({ entity_id: "", modes: [], bypass_modes: [], bypass_global_ids: [], allow_open_arm: false, trigger_on_open_only: false, trigger_unknown_unavailable: false });
       this._data.sensor_rules = rules;
+      this._renderSensors();
+    });
+
+    this.shadowRoot.getElementById("sensors-add-all-motion").addEventListener("click", () => {
+      const states = this._hass?.states || {};
+      const existing = new Set((this._data.sensor_rules || []).map((r) => r.entity_id));
+      const add = [];
+      Object.keys(states).forEach((eid) => {
+        if (!eid.startsWith("binary_sensor.")) return;
+        const s = states[eid];
+        const dc = String(s?.attributes?.device_class || "").toLowerCase();
+        if (!["motion", "occupancy", "presence"].includes(dc)) return;
+        if (existing.has(eid)) return;
+        add.push({ entity_id: eid, modes: [], bypass_modes: [], bypass_global_ids: [], allow_open_arm: false, trigger_on_open_only: false, trigger_unknown_unavailable: false });
+      });
+      this._data.sensor_rules = [...(this._data.sensor_rules || []), ...add];
+      this._renderSensors();
+    });
+
+    this.shadowRoot.getElementById("sensors-add-all-door").addEventListener("click", () => {
+      const states = this._hass?.states || {};
+      const existing = new Set((this._data.sensor_rules || []).map((r) => r.entity_id));
+      const add = [];
+      Object.keys(states).forEach((eid) => {
+        if (!eid.startsWith("binary_sensor.")) return;
+        const s = states[eid];
+        const dc = String(s?.attributes?.device_class || "").toLowerCase();
+        if (!["door", "window", "opening", "garage_door"].includes(dc)) return;
+        if (existing.has(eid)) return;
+        add.push({ entity_id: eid, modes: [], bypass_modes: [], bypass_global_ids: [], allow_open_arm: false, trigger_on_open_only: true, trigger_unknown_unavailable: false });
+      });
+      this._data.sensor_rules = [...(this._data.sensor_rules || []), ...add];
       this._renderSensors();
     });
 
@@ -333,28 +369,33 @@ class HAPanelNGAlarm extends HTMLElement {
         summary.innerHTML = `<ha-icon icon="${next.icon || "mdi:shield"}"></ha-icon> ${next.name || next.id || `Zone #${idx + 1}`}`;
       };
 
+      const selectedArmTypes = Array.isArray(mode.arm_types) && mode.arm_types.length
+        ? mode.arm_types
+        : [mode.arm_target || "away"];
+
       row.append(
         this._sel({ text: {} }, mode.id || "", (v) => upd({ id: v }), "Zone ID"),
         this._sel({ text: {} }, mode.name || "", (v) => upd({ name: v }), "Zone name"),
         this._sel({ icon: {} }, mode.icon || "mdi:shield", (v) => upd({ icon: v }), "Zone icon"),
-        this._sel({ select: { multiple: true, mode: "dropdown", options: [{ value: "away", label: "Away" }, { value: "home", label: "Home" }, { value: "night", label: "Night" }, { value: "vacation", label: "Vacation" }] } }, mode.arm_types || [mode.arm_target || "away"], (v) => upd({ arm_types: v || [] }), "Arm types available in this zone"),
+        this._sel({ select: { multiple: true, mode: "dropdown", options: [{ value: "away", label: "Away" }, { value: "home", label: "Home" }, { value: "night", label: "Night" }, { value: "vacation", label: "Vacation" }] } }, selectedArmTypes, (v) => { upd({ arm_types: v || [] }); this._renderModes(); }, "Arm types available in this zone"),
         this._sel({ boolean: {} }, !!mode.require_code_to_arm, (v) => upd({ require_code_to_arm: !!v }), "Code required for arming"),
-        this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, mode.exit_delay ?? 60, (v) => upd({ exit_delay: Number(v || 0) }), "Exit delay"),
-        this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, mode.entry_delay ?? 30, (v) => upd({ entry_delay: Number(v || 0) }), "Pending (entry) delay"),
-        this._sel({ number: { min: 0, max: 3600, step: 1, mode: "box", unit_of_measurement: "s" } }, mode.alarm_duration ?? 0, (v) => upd({ alarm_duration: Number(v || 0) }), "Alarm duration (0 = infinite)"),
-        this._sel({ select: { mode: "dropdown", options: [{ value: "none", label: "No timeout action" }, { value: "disarm", label: "Disarm after duration" }, { value: "rearm", label: "Re-arm same mode after duration" }] } }, mode.timeout_action || "none", (v) => upd({ timeout_action: v || "none" }), "After alarm duration"),
-        this._sel({ select: { mode: "dropdown", options: [{ value: "none", label: "No bypass" }, { value: "entity_state", label: "Entity state" }, { value: "template", label: "Template" }] } }, mode.bypass_mode || "none", (v) => { upd({ bypass_mode: v }); this._renderModes(); }, "Bypass mode"),
       );
 
-      const by = mode.bypass_mode || "none";
-      if (by === "entity_state") {
+      const delays = { ...(mode.delays || {}) };
+      const typeLabel = { away: "Away", home: "Home", night: "Night", vacation: "Vacation" };
+      selectedArmTypes.forEach((t) => {
+        const cur = delays[t] || {};
+        const setCur = (patch) => {
+          delays[t] = { ...cur, ...patch };
+          upd({ delays: delays });
+        };
         row.append(
-          this._sel({ entity: { multiple: true } }, mode.bypass_entities || [], (v) => upd({ bypass_entities: v || [] }), "Bypass entities (true = bypass)"),
+          this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.exit_delay ?? mode.exit_delay ?? 60, (v) => setCur({ exit_delay: Number(v || 0) }), `${typeLabel[t]} exit delay`),
+          this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.entry_delay ?? mode.entry_delay ?? 30, (v) => setCur({ entry_delay: Number(v || 0) }), `${typeLabel[t]} pending delay`),
+          this._sel({ number: { min: 0, max: 3600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.alarm_duration ?? mode.alarm_duration ?? 0, (v) => setCur({ alarm_duration: Number(v || 0) }), `${typeLabel[t]} alarm duration (0 = infinite)`),
+          this._sel({ select: { mode: "dropdown", options: [{ value: "none", label: "No timeout action" }, { value: "disarm", label: "Disarm after duration" }, { value: "rearm", label: "Re-arm after duration" }] } }, cur.timeout_action || mode.timeout_action || "none", (v) => setCur({ timeout_action: v || "none" }), `${typeLabel[t]} after duration`),
         );
-      }
-      if (by === "template") {
-        row.append(this._sel({ template: {} }, mode.bypass_template || "", (v) => upd({ bypass_template: v }), "Bypass template"));
-      }
+      });
 
       const del = document.createElement("button");
       del.className = "btn danger";
@@ -605,7 +646,12 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ select: { mode: "dropdown", options: stateOptions } }, (action.to || ["any"])[0] || "any", (v) => upd({ to: [v || "any"] }), "To state"),
         this._sel({ select: { mode: "dropdown", options: throughOptions } }, (action.through || ["any"])[0] || "any", (v) => upd({ through: [v || "any"] }), "Through mode"),
         this._sel({ select: { mode: "dropdown", options: userOptions } }, action.by_user || "any", (v) => upd({ by_user: v || "any" }), "By user"),
-        this._sel({ entity: { multiple: true } }, action.targets || action.scripts || [], (v) => upd({ targets: v || [], scripts: v || [] }), "Targets (any turn_on entity)"),
+      );
+      const sep = document.createElement("hr");
+      sep.className = "sep";
+      row.appendChild(sep);
+      row.append(
+        this._sel({ entity: { multiple: true } }, action.targets || action.scripts || [], (v) => upd({ targets: v || [], scripts: v || [] }), "Triggered targets (any turn_on entity)"),
       );
 
       const del = document.createElement("button");

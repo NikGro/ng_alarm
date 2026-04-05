@@ -361,6 +361,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         mode = self._mode_config()
         if not mode:
             return default
+        arm_type = str(self._current_arm_type or "").strip().lower()
+        delays = mode.get("delays", {}) if isinstance(mode.get("delays", {}), dict) else {}
+        if arm_type and arm_type in delays and isinstance(delays.get(arm_type), dict):
+            try:
+                return max(0, int(delays[arm_type].get(kind, mode.get(kind, default))))
+            except (TypeError, ValueError):
+                pass
         try:
             return max(0, int(mode.get(kind, default)))
         except (TypeError, ValueError):
@@ -370,7 +377,14 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         mode = self._mode_config()
         if not mode:
             return "none"
-        action = str(mode.get(CONF_MODE_TIMEOUT_ACTION, "none") or "none").strip().lower()
+        arm_type = str(self._current_arm_type or "").strip().lower()
+        delays = mode.get("delays", {}) if isinstance(mode.get("delays", {}), dict) else {}
+        action = None
+        if arm_type and arm_type in delays and isinstance(delays.get(arm_type), dict):
+            action = delays[arm_type].get("timeout_action")
+        if action is None:
+            action = mode.get(CONF_MODE_TIMEOUT_ACTION, "none")
+        action = str(action or "none").strip().lower()
         if action not in {"none", "disarm", "rearm"}:
             action = "none"
         return action

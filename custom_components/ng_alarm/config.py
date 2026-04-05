@@ -137,6 +137,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
         exit_delay = mode.get("exit_delay", DEFAULTS.get("exit_delay_away", 60))
         entry_delay = mode.get("entry_delay", DEFAULTS.get("entry_delay_away", 30))
         alarm_duration = mode.get(CONF_MODE_ALARM_DURATION, 0)
+        delays_raw = mode.get("delays", {}) if isinstance(mode.get("delays", {}), dict) else {}
         try:
             exit_delay = max(0, int(exit_delay))
         except (TypeError, ValueError):
@@ -150,6 +151,31 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
         except (TypeError, ValueError):
             alarm_duration = 0
 
+        delays = {}
+        for at in arm_types:
+            at_cfg = delays_raw.get(at, {}) if isinstance(delays_raw.get(at, {}), dict) else {}
+            try:
+                at_exit = max(0, int(at_cfg.get("exit_delay", exit_delay)))
+            except (TypeError, ValueError):
+                at_exit = exit_delay
+            try:
+                at_entry = max(0, int(at_cfg.get("entry_delay", entry_delay)))
+            except (TypeError, ValueError):
+                at_entry = entry_delay
+            try:
+                at_alarm_dur = max(0, int(at_cfg.get("alarm_duration", alarm_duration)))
+            except (TypeError, ValueError):
+                at_alarm_dur = alarm_duration
+            at_timeout = str(at_cfg.get("timeout_action", mode.get(CONF_MODE_TIMEOUT_ACTION, "none")) or "none").strip().lower()
+            if at_timeout not in {"none", "disarm", "rearm"}:
+                at_timeout = "none"
+            delays[at] = {
+                "exit_delay": at_exit,
+                "entry_delay": at_entry,
+                "alarm_duration": at_alarm_dur,
+                "timeout_action": at_timeout,
+            }
+
         modes.append(
             {
                 "id": mode_id,
@@ -162,6 +188,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                 "entry_delay": entry_delay,
                 CONF_MODE_ALARM_DURATION: alarm_duration,
                 CONF_MODE_TIMEOUT_ACTION: str(mode.get(CONF_MODE_TIMEOUT_ACTION, "none") or "none").strip().lower(),
+                "delays": delays,
                 "bypass_mode": bypass_mode,
                 "bypass_entities": bypass_entities,
                 "bypass_state": bypass_state,
