@@ -69,7 +69,7 @@ class HAPanelNGAlarm extends HTMLElement {
           display:flex;
           align-items:center;
           min-height: 56px;
-          margin: 0 -12px 10px;
+          margin: 0 calc(50% - 50vw) 10px;
           padding: 0 8px;
           background: var(--app-header-background-color, var(--card-background-color));
           border-bottom: 1px solid var(--divider-color);
@@ -99,7 +99,7 @@ class HAPanelNGAlarm extends HTMLElement {
         .head-version { font-size: 0.85rem; color: var(--secondary-text-color); }
         .muted { color: var(--secondary-text-color); font-size: 0.9rem; }
 
-        .tabs { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; margin: 12px 0; }
+        .tabs { display:flex; flex-wrap:nowrap; gap:8px; margin: 12px 0; overflow:auto; }
         .tab {
           border:1px solid var(--divider-color);
           background: var(--card-background-color);
@@ -112,6 +112,7 @@ class HAPanelNGAlarm extends HTMLElement {
           gap: 6px;
           min-height: 38px;
           font-size: 0.95rem;
+          flex: 0 0 auto;
         }
         .tab.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
 
@@ -153,15 +154,17 @@ class HAPanelNGAlarm extends HTMLElement {
         ha-card::part(header) { padding-left: 0 !important; padding-right: 0 !important; }
         #status.status-ok { color: #1b8f3a; font-weight: 600; }
         #status.status-error { color: #b00020; font-weight: 600; }
-        .action-btn-row { display:flex; align-items:center; gap:10px; margin-top: 10px; flex-wrap: wrap; }
-        .action-btn-row .btn { min-width: 150px; justify-content: center; border-radius: 999px; }
+        .action-btn-row { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top: 10px; flex-wrap: wrap; }
+        .action-btn-row .btn { min-width: 170px; min-height: 40px; justify-content: center; border-radius: 999px; }
         .inline-test-result { font-size: 0.9rem; color: var(--secondary-text-color); }
         .inline-test-result.ok { color: #1b8f3a; font-weight: 600; }
         .inline-test-result.err { color: #b00020; font-weight: 600; }
+        .hint-inline { font-size: 0.82rem; color: var(--secondary-text-color); margin-top: -4px; }
 
         @media (max-width: 800px) {
           .wrap { max-width: 100%; padding: 0 10px 10px; }
-          .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .tabs { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+          .tab { flex: 1 1 auto; }
           .btn-save { min-width: 156px; }
         }
       </style>
@@ -640,7 +643,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
       const btnRow = document.createElement("div");
       btnRow.className = "action-btn-row";
-      btnRow.append(test, del, testResult);
+      btnRow.append(del, test, testResult);
 
       details.appendChild(row);
       details.appendChild(btnRow);
@@ -714,10 +717,43 @@ class HAPanelNGAlarm extends HTMLElement {
       sep.className = "sep";
       row.appendChild(sep);
 
+      const usedIn = this._sel(
+        { select: { multiple: true, mode: "dropdown", options: modeOptions } },
+        rule.modes || [],
+        (v) => upd({ modes: v || [] }),
+        "Used in"
+      );
+      const usedInHint = document.createElement("div");
+      usedInHint.className = "hint-inline";
+      usedInHint.textContent = "Where this sensor is active.";
+
+      const bypassedIn = this._sel(
+        { select: { multiple: true, mode: "dropdown", options: modeOptions } },
+        rule.bypass_modes || [],
+        (v) => upd({ bypass_modes: v || [] }),
+        "Bypassed in"
+      );
+      const bypassedInHint = document.createElement("div");
+      bypassedInHint.className = "hint-inline";
+      bypassedInHint.textContent = "Ignored when zone bypass is active.";
+
+      const globalBypass = this._sel(
+        { select: { multiple: true, mode: "dropdown", options: globalBypassOptions } },
+        rule.bypass_global_ids || [],
+        (v) => upd({ bypass_global_ids: v || [] }),
+        "Global bypass"
+      );
+      const globalBypassHint = document.createElement("div");
+      globalBypassHint.className = "hint-inline";
+      globalBypassHint.textContent = "Extra bypass conditions linked to this sensor.";
+
       row.append(
-        this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.modes || [], (v) => upd({ modes: v || [] }), "Modes used in"),
-        this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.bypass_modes || [], (v) => upd({ bypass_modes: v || [] }), "Modes bypassed when zone bypass is active"),
-        this._sel({ select: { multiple: true, mode: "dropdown", options: globalBypassOptions } }, rule.bypass_global_ids || [], (v) => upd({ bypass_global_ids: v || [] }), "Global bypass elements"),
+        usedIn,
+        usedInHint,
+        bypassedIn,
+        bypassedInHint,
+        globalBypass,
+        globalBypassHint,
         this._sel({ boolean: {} }, !rule.allow_open_arm, (v) => upd({ allow_open_arm: !v }), "Prohibit arming when open"),
         this._sel({ boolean: {} }, !!rule.trigger_on_open_only, (v) => upd({ trigger_on_open_only: !!v }), "Trigger only when opening"),
         this._sel({ boolean: {} }, !!rule.trigger_unknown_unavailable, (v) => upd({ trigger_unknown_unavailable: !!v }), "Trigger when becomes unknown OR unavailable"),
