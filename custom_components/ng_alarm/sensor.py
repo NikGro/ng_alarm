@@ -33,8 +33,13 @@ class NGAlarmEventLogSensor(SensorEntity):
         entities = self._runtime.entities or ([self._runtime.entity] if self._runtime.entity else [])
         events = []
         for entity in entities:
-            if entity:
-                events.extend(entity.get_event_log())
+            if not entity:
+                continue
+            zone = getattr(entity, "_zone_id", None) or "main"
+            for ev in entity.get_event_log():
+                merged = dict(ev)
+                merged.setdefault("zone", zone)
+                events.append(merged)
         events.sort(key=lambda x: x.get("ts", 0))
         return events
 
@@ -50,16 +55,18 @@ class NGAlarmEventLogSensor(SensorEntity):
         if not events:
             return "no_events"
         last = events[-1]
+        zone = str(last.get("zone") or "main")
         from_state = str(last.get("from_state") or "unknown")
         to_state = str(last.get("to_state") or str(last.get("state") or "unknown"))
         by_actor = str(last.get("by") or last.get("actor") or "unknown")
-        txt = f"{from_state} -> {to_state} by {by_actor}"
+        txt = f"[{zone}] {from_state} -> {to_state} by {by_actor}"
         return txt[:255]
 
     @property
     def extra_state_attributes(self):
         events = self._all_events()
         last = events[-1] if events else {}
+        zone = str(last.get("zone") or "main")
         from_state = str(last.get("from_state") or "unknown")
         to_state = str(last.get("to_state") or str(last.get("state") or "unknown"))
         by_actor = str(last.get("by") or last.get("actor") or "unknown")
@@ -69,10 +76,12 @@ class NGAlarmEventLogSensor(SensorEntity):
             "last_actor": last.get("actor"),
             "last_state": last.get("state"),
             "last_mode": last.get("mode"),
+            "last_zone": zone,
             "last_ts": last.get("ts"),
             "enabled": bool(self._runtime.config.get(CONF_EXPOSE_EVENT_LOG_SENSOR, False)),
             "from_state": from_state,
             "to_state": to_state,
             "by": by_actor,
-            "summary_text": f"{from_state} -> {to_state} by {by_actor}",
+            "zone": zone,
+            "summary_text": f"[{zone}] {from_state} -> {to_state} by {by_actor}",
         }
