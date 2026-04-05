@@ -112,18 +112,18 @@ class HAPanelNGAlarm extends HTMLElement {
         </div>
 
         <div id="modes" class="section">
-          <ha-card header="Modes">
-            <div class="muted">Eigene Modes statt Legacy Default Modes</div>
+          <ha-card header="Zones (formerly Modes)">
+            <div class="muted">Jede Zone kann eigene Arming-Typen/Delays/Bypass-Konfiguration haben.</div>
             <div id="modes-list" class="list" style="margin-top:10px"></div>
-            <button id="modes-add" class="btn" type="button">+ Add mode</button>
+            <button id="modes-add" class="btn" type="button">+ Add zone</button>
           </ha-card>
         </div>
 
         <div id="sensors" class="section">
-          <ha-card header="Sensor Rules">
-            <div class="muted">Pro Sensor Modes, Bypass und Trigger-Flags</div>
+          <ha-card header="Sensors">
+            <div class="muted">Pro Sensor Zonen, Bypass und Trigger-Flags</div>
             <div id="sensors-list" class="list" style="margin-top:10px"></div>
-            <button id="sensors-add" class="btn" type="button">+ Add sensor rule</button>
+            <button id="sensors-add" class="btn" type="button">+ Add sensor</button>
           </ha-card>
         </div>
 
@@ -243,6 +243,12 @@ class HAPanelNGAlarm extends HTMLElement {
     (this._data.modes || []).forEach((mode, idx) => {
       const item = document.createElement("div");
       item.className = "item";
+      const details = document.createElement("details");
+      details.open = !mode.name;
+      const summary = document.createElement("summary");
+      summary.innerHTML = `<ha-icon icon="${mode.icon || "mdi:shield"}"></ha-icon> ${mode.name || mode.id || `Zone #${idx + 1}`}`;
+      details.appendChild(summary);
+
       const row = document.createElement("div");
       row.className = "row";
 
@@ -254,12 +260,13 @@ class HAPanelNGAlarm extends HTMLElement {
         }
         modes[idx] = next;
         this._data.modes = modes;
+        summary.innerHTML = `<ha-icon icon="${next.icon || "mdi:shield"}"></ha-icon> ${next.name || next.id || `Zone #${idx + 1}`}`;
       };
 
       row.append(
-        this._sel({ text: {} }, mode.id || "", (v) => upd({ id: v }), "Mode ID"),
-        this._sel({ text: {} }, mode.name || "", (v) => upd({ name: v }), "Mode name"),
-        this._sel({ icon: {} }, mode.icon || "mdi:shield", (v) => upd({ icon: v }), "Mode icon"),
+        this._sel({ text: {} }, mode.id || "", (v) => upd({ id: v }), "Zone ID"),
+        this._sel({ text: {} }, mode.name || "", (v) => upd({ name: v }), "Zone name"),
+        this._sel({ icon: {} }, mode.icon || "mdi:shield", (v) => upd({ icon: v }), "Zone icon"),
         this._sel({ select: { mode: "dropdown", options: [{ value: "away", label: "Away" }, { value: "home", label: "Home" }, { value: "night", label: "Night" }, { value: "vacation", label: "Vacation" }] } }, mode.arm_target || "away", (v) => upd({ arm_target: v }), "Arm type"),
         this._sel({ boolean: {} }, !!mode.require_code_to_arm, (v) => upd({ require_code_to_arm: !!v }), "Code required for arming"),
         this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, mode.exit_delay ?? 60, (v) => upd({ exit_delay: Number(v || 0) }), "Exit delay"),
@@ -282,7 +289,7 @@ class HAPanelNGAlarm extends HTMLElement {
       const del = document.createElement("button");
       del.className = "btn danger";
       del.type = "button";
-      del.textContent = "Delete mode";
+      del.textContent = "Delete zone";
       del.addEventListener("click", () => {
         const modes = [...(this._data.modes || [])];
         modes.splice(idx, 1);
@@ -292,8 +299,9 @@ class HAPanelNGAlarm extends HTMLElement {
         this._renderActions();
       });
 
-      item.appendChild(row);
-      item.appendChild(del);
+      details.appendChild(row);
+      details.appendChild(del);
+      item.appendChild(details);
       host.appendChild(item);
     });
   }
@@ -374,7 +382,8 @@ class HAPanelNGAlarm extends HTMLElement {
       const details = document.createElement("details");
       details.open = !u.name;
       const summary = document.createElement("summary");
-      summary.textContent = u.name || `User #${idx + 1}`;
+      const userIcon = u.can_panic ? "mdi:account-alert" : "mdi:account";
+      summary.innerHTML = `<ha-icon icon="${userIcon}"></ha-icon> ${u.name || `User #${idx + 1}`}`;
       details.appendChild(summary);
 
       const row = document.createElement("div");
@@ -383,7 +392,9 @@ class HAPanelNGAlarm extends HTMLElement {
         const users = [...(this._data.users || [])];
         users[idx] = { ...users[idx], ...patch };
         this._data.users = users;
-        summary.textContent = users[idx].name || `User #${idx + 1}`;
+        const iu = users[idx];
+        const userIconNow = iu.can_panic ? "mdi:account-alert" : "mdi:account";
+        summary.innerHTML = `<ha-icon icon="${userIconNow}"></ha-icon> ${iu.name || `User #${idx + 1}`}`;
       };
 
       const modeOptions = this._modeOptions();

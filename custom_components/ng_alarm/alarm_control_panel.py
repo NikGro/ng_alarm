@@ -277,7 +277,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     @property
     def code_arm_required(self) -> bool:
-        return bool(self._config.get(CONF_REQUIRE_CODE_TO_ARM, True))
+        # Keep keypad behavior stable in HA frontend; mode-level enforcement is done in backend.
+        return True
 
     def _resolve_mode_for_arm(self, target: str) -> str:
         modes = self._config.get(CONF_MODES, []) or []
