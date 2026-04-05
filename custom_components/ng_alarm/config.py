@@ -13,6 +13,7 @@ from .const import (
     CONF_ACTIONS,
     CONF_ACTION_BY_USER,
     CONF_ACTION_FROM,
+    CONF_CODE_INPUT_MODE,
     CONF_ACTION_SCRIPTS,
     CONF_ACTION_TARGETS,
     CONF_ACTION_THROUGH,
@@ -84,6 +85,8 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     data["name"] = str(data.get("name") or DEFAULTS["name"])
     data["bypass_state"] = str(data.get("bypass_state") or DEFAULTS["bypass_state"])
     data[CONF_REQUIRE_CODE_TO_ARM] = bool(data.get(CONF_REQUIRE_CODE_TO_ARM, True))
+    mode = str(data.get(CONF_CODE_INPUT_MODE, "pin") or "pin").strip().lower()
+    data[CONF_CODE_INPUT_MODE] = mode if mode in {"pin", "password"} else "pin"
     data[CONF_EXPOSE_EVENT_LOG_SENSOR] = bool(data.get(CONF_EXPOSE_EVENT_LOG_SENSOR, False))
 
     mode = str(data.get(CONF_BYPASS_MODE) or BYPASS_MODE_ENTITY_STATE)

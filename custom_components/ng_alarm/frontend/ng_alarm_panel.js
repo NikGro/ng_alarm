@@ -33,6 +33,11 @@ class HAPanelNGAlarm extends HTMLElement {
     this.shadowRoot.querySelectorAll("ha-form, ha-selector").forEach((el) => {
       el.hass = hass;
     });
+    const g = this.shadowRoot.getElementById("form-general");
+    if (g) {
+      g.hass = hass;
+      g.data = this._data;
+    }
 
     const subtitle = this.shadowRoot.getElementById("subtitle");
     if (subtitle) subtitle.textContent = this._t("Configuration without legacy master codes", "Konfiguration ohne Legacy-Master-Codes");
@@ -130,7 +135,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
         <div id="general" class="section">
           <ha-card header="General Settings">
-            <div class="muted" id="general-empty">(intentionally empty)</div>
+            <ha-form id="form-general"></ha-form>
           </ha-card>
         </div>
 
@@ -266,7 +271,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("users-add").addEventListener("click", () => {
       const users = [...(this._data.users || [])];
-      users.push({ name: "", code: "", can_arm: true, can_disarm: true, can_panic: false, arm_modes: [], disarm_modes: [] });
+      users.push({ name: "", code: "", code_confirm: "", can_arm: true, can_disarm: true, can_panic: false, arm_modes: [], disarm_modes: [] });
       this._data.users = users;
       this._renderUsers();
     });
@@ -616,6 +621,7 @@ class HAPanelNGAlarm extends HTMLElement {
       row.append(
         this._sel({ text: {} }, u.name || "", (v) => upd({ name: v }), "Name"),
         this._sel({ text: { type: "password" } }, u.code || "", (v) => upd({ code: v }), "Code"),
+        this._sel({ text: { type: "password" } }, u.code_confirm || "", (v) => upd({ code_confirm: v }), "Confirm code"),
         this._sel({ boolean: {} }, !!u.can_arm, (v) => upd({ can_arm: !!v }), "Can arm"),
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.arm_modes || [], (v) => upd({ arm_modes: v || [] }), "Arm modes"),
         this._sel({ boolean: {} }, !!u.can_disarm, (v) => upd({ can_disarm: !!v }), "Can disarm"),
@@ -831,10 +837,31 @@ class HAPanelNGAlarm extends HTMLElement {
 
   async _saveConfig() {
     try {
+      // user code confirmation check
+      const users = Array.isArray(this._data.users) ? this._data.users : [];
+      for (const u of users) {
+        const c1 = String(u.code || "");
+        const c2 = String(u.code_confirm || "");
+        if (c1 !== c2) {
+          this._status(`Code confirmation mismatch for user: ${u.name || "(unnamed)"}`);
+          return;
+        }
+      }
+
+      const payload = JSON.parse(JSON.stringify(this._data));
+      // remove ui-only fields
+      if (Array.isArray(payload.users)) {
+        payload.users = payload.users.map((u) => {
+          const copy = { ...u };
+          delete copy.code_confirm;
+          return copy;
+        });
+      }
       // remove legacy master codes if they still exist in storage
-      delete this._data.alarm_code;
-      delete this._data.panic_code;
-      await this._hass.callApi("post", "ng_alarm/config", this._data);
+      delete payload.alarm_code;
+      delete payload.panic_code;
+
+      await this._hass.callApi("post", "ng_alarm/config", payload);
       this._status("Saved and runtime reloaded.");
     } catch (err) {
       this._status(`Save failed: ${err.message}`);

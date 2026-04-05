@@ -23,6 +23,7 @@ UNKNOWN = "unknown"
 
 CONF_NAME = "name"
 CONF_REQUIRE_CODE_TO_ARM = "require_code_to_arm"
+CONF_CODE_INPUT_MODE = "code_input_mode"
 CONF_MODES = "modes"
 CONF_SENSOR_RULES = "sensor_rules"
 CONF_GLOBAL_BYPASS_RULES = "global_bypass_rules"
@@ -84,6 +85,7 @@ ATTR_ACTOR = "actor"
 DEFAULTS: dict = {
     CONF_NAME: "NG Alarm",
     CONF_REQUIRE_CODE_TO_ARM: True,
+    CONF_CODE_INPUT_MODE: "pin",
     CONF_MODES: [],
     CONF_SENSOR_RULES: [],
     CONF_GLOBAL_BYPASS_RULES: [],
