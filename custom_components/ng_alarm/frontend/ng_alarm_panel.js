@@ -1088,6 +1088,7 @@ class HAPanelNGAlarm extends HTMLElement {
       { value: "armed_away", label: "Armed Away" },
       { value: "pending", label: "Pending" },
       { value: "triggered", label: "Triggered" },
+      { value: "arm_blocked", label: this._t("Arm blocked", "Scharfschalten blockiert") },
     ];
     const throughZoneOptions = [{ value: "any", label: "Any" }, ...this._modeOptions()];
     const throughModeOptions = [

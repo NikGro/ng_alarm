@@ -972,6 +972,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                     by=self._last_actor,
                     sensors=blocking,
                 )
+                # Trigger action-builder flows for blocked arming attempts.
+                await self._async_run_transition_actions(prev, "arm_blocked", "arm_blocked")
                 return
 
         self._alarm_state = AlarmControlPanelState.ARMING if delay > 0 else mode
