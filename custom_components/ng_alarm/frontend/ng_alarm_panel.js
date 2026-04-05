@@ -394,7 +394,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("actions-add").addEventListener("click", () => {
       const actions = [...(this._data.actions || [])];
-      actions.push({ name: "", icon: "mdi:script-text-outline", from: ["any"], to: ["any"], through: ["any"], through_mode: ["any"], by_user: "any", targets: [] });
+      actions.push({ name: "", icon: "mdi:script-text-outline", from: ["any"], to: ["any"], through: ["any"], through_mode: ["any"], by_user: "any_actor", targets: [] });
       this._data.actions = actions;
       this._renderActions();
       this._scheduleAutosave();
@@ -1076,8 +1076,9 @@ class HAPanelNGAlarm extends HTMLElement {
       { value: "vacation", label: "Vacation" },
     ];
     const userOptions = [
-      { value: "any", label: "Any user" },
-      { value: "none", label: "None / sensor-triggered" },
+      { value: "any_actor", label: this._t("Any User / Any Sensor", "Beliebiger Benutzer / Beliebiger Sensor") },
+      { value: "any_user", label: this._t("Any User", "Beliebiger Benutzer") },
+      { value: "none", label: this._t("Any Sensor", "Beliebiger Sensor") },
       ...(this._data.users || []).map((u) => ({
         value: (u.name || "").trim().toLowerCase() || "any",
         label: u.name || "Unnamed",
@@ -1110,7 +1111,7 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ select: { mode: "dropdown", options: stateOptions } }, (action.to || ["any"])[0] || "any", (v) => upd({ to: [v || "any"] }), "To state"),
         this._sel({ select: { mode: "dropdown", options: throughZoneOptions } }, (action.through || ["any"])[0] || "any", (v) => upd({ through: [v || "any"] }), "Through zone"),
         this._sel({ select: { mode: "dropdown", options: throughModeOptions } }, (action.through_mode || ["any"])[0] || "any", (v) => upd({ through_mode: [v || "any"] }), "Through mode"),
-        this._sel({ select: { mode: "dropdown", options: userOptions } }, action.by_user || "any", (v) => upd({ by_user: v || "any" }), "By"),
+        this._sel({ select: { mode: "dropdown", options: userOptions } }, action.by_user || "any_actor", (v) => upd({ by_user: v || "any_actor" }), "By"),
       );
       const sep = document.createElement("hr");
       sep.className = "sep";
@@ -1146,8 +1147,14 @@ class HAPanelNGAlarm extends HTMLElement {
       });
 
       const btnRow = document.createElement("div");
-      btnRow.className = "action-btn-row";
-      btnRow.append(test, del, testResult);
+      btnRow.className = "sensor-btn-row";
+      const btnTop = document.createElement("div");
+      btnTop.className = "sensor-btn-top";
+      btnTop.append(test, testResult);
+      const btnDelete = document.createElement("div");
+      btnDelete.className = "sensor-btn-delete";
+      btnDelete.append(del);
+      btnRow.append(btnTop, btnDelete);
 
       details.appendChild(row);
       details.appendChild(btnRow);
@@ -1160,10 +1167,22 @@ class HAPanelNGAlarm extends HTMLElement {
     try {
       const targets = action.targets || action.scripts || [];
       if (!Array.isArray(targets) || !targets.length) return false;
+      const variables = {
+        from_state: "disarmed",
+        to_state: "triggered",
+        alarm_state: "triggered",
+        alarm_mode: (action.through || ["any"])[0] || "any",
+        zone: (action.through || ["main"])[0] || "main",
+        arm_type: (action.through_mode || ["away"])[0] || "away",
+        actor: "test_user",
+        by: "test_user",
+        triggered_sensor: "binary_sensor.test_sensor",
+        triggered_sensor_name: "Test Sensor",
+      };
       for (const entityId of targets) {
         const [domain] = String(entityId || "").split(".", 1);
         if (domain === "script") {
-          await this._hass.callService("script", "turn_on", { entity_id: entityId, variables: { test: true } });
+          await this._hass.callService("script", "turn_on", { entity_id: entityId, variables });
         } else {
           await this._hass.callService("homeassistant", "turn_on", { entity_id: entityId });
         }

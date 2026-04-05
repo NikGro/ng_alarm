@@ -507,9 +507,11 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 continue
             by_user = str(action.get(CONF_ACTION_BY_USER, "any") or "any").strip().lower()
             actor = str(self._last_actor).strip().lower()
-            if by_user in {"none", "sensor"} and actor not in {"", "unknown", "none"}:
+            if by_user in {"none", "sensor", "any_sensor"} and actor not in {"", "unknown", "none"}:
                 continue
-            if by_user not in {"", "any", "none", "sensor"} and by_user != actor:
+            if by_user == "any_user" and actor in {"", "unknown", "none"}:
+                continue
+            if by_user not in {"", "any", "any_actor", "none", "sensor", "any_sensor", "any_user"} and by_user != actor:
                 continue
 
             for entity_id in action.get(CONF_ACTION_TARGETS, action.get(CONF_ACTION_SCRIPTS, [])):
