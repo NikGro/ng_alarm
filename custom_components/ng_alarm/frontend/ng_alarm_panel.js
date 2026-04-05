@@ -4,6 +4,7 @@ class HAPanelNGAlarm extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._initialized = false;
     this._hass = null;
+    this._activeTab = "general";
   }
 
   set hass(hass) {
@@ -11,7 +12,9 @@ class HAPanelNGAlarm extends HTMLElement {
     if (!this._initialized) {
       this._initialized = true;
       this._renderShell();
+      this._bindEvents();
       this._loadConfig();
+      this._switchTab(this._activeTab);
     }
   }
 
@@ -23,54 +26,102 @@ class HAPanelNGAlarm extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>
         :host { display:block; height:100%; box-sizing:border-box; }
-        .wrap { padding: 16px; max-width: 1100px; margin: 0 auto; color: var(--primary-text-color); }
-        h1 { margin: 0 0 8px 0; font-size: 28px; }
-        .muted { color: var(--secondary-text-color); font-size: 0.9rem; margin-bottom: 14px; }
-        .card { border: 1px solid var(--divider-color); border-radius: 12px; padding: 12px; margin-bottom: 12px; background: var(--card-background-color); }
-        .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
+        .wrap { padding: 16px; max-width: 1150px; margin: 0 auto; color: var(--primary-text-color); }
+        .head { display:flex; align-items:center; gap:12px; margin-bottom: 14px; }
+        .logo { width:36px; height:36px; border-radius:10px; background:rgba(0,0,0,0.05); padding:6px; }
+        h1 { margin:0; font-size: 28px; }
+        .muted { color: var(--secondary-text-color); font-size: 0.9rem; }
+
+        .tabs { display:flex; flex-wrap:wrap; gap:8px; margin: 16px 0; }
+        .tab { border:1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); border-radius: 10px; padding: 8px 12px; cursor:pointer; }
+        .tab.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
+
+        .card { border: 1px solid var(--divider-color); border-radius: 14px; padding: 14px; margin-bottom: 12px; background: var(--card-background-color); }
+        .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; }
+        .section { display:none; }
+        .section.active { display:block; }
+
         label { display:block; font-size:0.85rem; margin-bottom:4px; color: var(--secondary-text-color); }
-        input, textarea { width:100%; box-sizing:border-box; padding:8px; border-radius:8px; border:1px solid var(--divider-color); background:var(--card-background-color); color:var(--primary-text-color); }
-        textarea { min-height: 92px; }
-        button { margin-top: 8px; padding: 10px 14px; border: none; border-radius: 10px; background: var(--primary-color); color: #fff; font-weight: 600; cursor: pointer; }
+        input, textarea { width:100%; box-sizing:border-box; padding:10px; border-radius:8px; border:1px solid var(--divider-color); background:var(--card-background-color); color:var(--primary-text-color); }
+        textarea { min-height: 96px; font-family: ui-monospace, Menlo, Monaco, Consolas, monospace; }
+
+        .footer { display:flex; align-items:center; gap:10px; margin-top: 10px; }
+        button { padding: 10px 14px; border: none; border-radius: 10px; background: var(--primary-color); color: #fff; font-weight: 600; cursor: pointer; }
       </style>
+
       <div class="wrap">
-        <h1>Alarm</h1>
-        <div class="muted">Runtime-Konfiguration für NG Alarm (ohne Config-Flow-Felder).</div>
-
-        <div class="card grid">
-          <div><label>Name</label><input id="name"></div>
-          <div><label>Bypass State</label><input id="bypass_state"></div>
-          <div><label>Alarm Code</label><input id="alarm_code" type="password"></div>
-          <div><label>Panic Code (optional)</label><input id="panic_code" type="password"></div>
-          <div><label>Exit Delay Away</label><input id="exit_delay_away" type="number"></div>
-          <div><label>Entry Delay Away</label><input id="entry_delay_away" type="number"></div>
-          <div><label>Exit Delay Home</label><input id="exit_delay_home" type="number"></div>
-          <div><label>Entry Delay Home</label><input id="entry_delay_home" type="number"></div>
+        <div class="head">
+          <img class="logo" src="/ng_alarm_static/shield_siren.svg" alt="Alarm Icon" />
+          <div>
+            <h1>Alarm</h1>
+            <div class="muted">NG Alarm Runtime-Konfiguration</div>
+          </div>
         </div>
 
-        <div class="card grid">
-          <div><label>Away Active Sensors (eine Entity pro Zeile)</label><textarea id="away_active_sensors"></textarea></div>
-          <div><label>Away Bypass Sensors</label><textarea id="away_bypass_sensors"></textarea></div>
-          <div><label>Home Active Sensors</label><textarea id="home_active_sensors"></textarea></div>
-          <div><label>Home Bypass Sensors</label><textarea id="home_bypass_sensors"></textarea></div>
-          <div><label>Bypass Entities</label><textarea id="bypass_entities"></textarea></div>
+        <div class="tabs">
+          <button class="tab" data-tab="general">⚙️ Generell</button>
+          <button class="tab" data-tab="sensors">🧲 Sensoren</button>
+          <button class="tab" data-tab="actions">🎬 Aktionen</button>
         </div>
 
-        <div class="card grid">
-          <div><label>Pending Scripts</label><textarea id="pending_scripts"></textarea></div>
-          <div><label>Triggered Scripts</label><textarea id="triggered_scripts"></textarea></div>
-          <div><label>Armed Away Scripts</label><textarea id="armed_away_scripts"></textarea></div>
-          <div><label>Armed Home Scripts</label><textarea id="armed_home_scripts"></textarea></div>
-          <div><label>Disarmed Scripts</label><textarea id="disarmed_scripts"></textarea></div>
-          <div><label>Panic Scripts</label><textarea id="panic_scripts"></textarea></div>
+        <div id="general" class="section card">
+          <div class="grid">
+            <div><label>Name</label><input id="name"></div>
+            <div><label>Bypass State</label><input id="bypass_state"></div>
+            <div><label>Alarm Code</label><input id="alarm_code" type="password"></div>
+            <div><label>Panic Code (optional)</label><input id="panic_code" type="password"></div>
+            <div><label>Exit Delay Away (Sek.)</label><input id="exit_delay_away" type="number"></div>
+            <div><label>Entry Delay Away (Sek.)</label><input id="entry_delay_away" type="number"></div>
+            <div><label>Exit Delay Home (Sek.)</label><input id="exit_delay_home" type="number"></div>
+            <div><label>Entry Delay Home (Sek.)</label><input id="entry_delay_home" type="number"></div>
+          </div>
         </div>
 
-        <button id="save">Save & Reload</button>
-        <div class="muted" id="status"></div>
+        <div id="sensors" class="section card">
+          <div class="grid">
+            <div><label>Away Active Sensors (eine Entity pro Zeile)</label><textarea id="away_active_sensors"></textarea></div>
+            <div><label>Away Bypass Sensors</label><textarea id="away_bypass_sensors"></textarea></div>
+            <div><label>Home Active Sensors</label><textarea id="home_active_sensors"></textarea></div>
+            <div><label>Home Bypass Sensors</label><textarea id="home_bypass_sensors"></textarea></div>
+            <div><label>Bypass Entities</label><textarea id="bypass_entities"></textarea></div>
+          </div>
+        </div>
+
+        <div id="actions" class="section card">
+          <div class="grid">
+            <div><label>Pending Scripts</label><textarea id="pending_scripts"></textarea></div>
+            <div><label>Triggered Scripts</label><textarea id="triggered_scripts"></textarea></div>
+            <div><label>Armed Away Scripts</label><textarea id="armed_away_scripts"></textarea></div>
+            <div><label>Armed Home Scripts</label><textarea id="armed_home_scripts"></textarea></div>
+            <div><label>Disarmed Scripts</label><textarea id="disarmed_scripts"></textarea></div>
+            <div><label>Panic Scripts</label><textarea id="panic_scripts"></textarea></div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <button id="save">Speichern & Reload</button>
+          <div class="muted" id="status"></div>
+        </div>
       </div>
     `;
+  }
 
+  _bindEvents() {
     this.shadowRoot.getElementById("save").addEventListener("click", () => this._saveConfig());
+
+    this.shadowRoot.querySelectorAll(".tab").forEach((btn) => {
+      btn.addEventListener("click", () => this._switchTab(btn.dataset.tab));
+    });
+  }
+
+  _switchTab(tab) {
+    this._activeTab = tab;
+    this.shadowRoot.querySelectorAll(".tab").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.tab === tab);
+    });
+    this.shadowRoot.querySelectorAll(".section").forEach((sec) => {
+      sec.classList.toggle("active", sec.id === tab);
+    });
   }
 
   async _loadConfig() {
@@ -102,7 +153,7 @@ class HAPanelNGAlarm extends HTMLElement {
         "panic_scripts",
       ].forEach((k) => this._setValue(k, (data[k] || []).join("\n")));
 
-      this._status("Config geladen.");
+      this._status("Konfiguration geladen.");
     } catch (err) {
       this._status(`Laden fehlgeschlagen: ${err.message}`);
     }
@@ -174,7 +225,6 @@ if (!customElements.get("ha-panel-ng-alarm")) {
   customElements.define("ha-panel-ng-alarm", HAPanelNGAlarm);
 }
 
-// Compatibility alias for older panel registration variants.
 if (!customElements.get("ng-alarm-panel")) {
   customElements.define("ng-alarm-panel", HAPanelNGAlarm);
 }
