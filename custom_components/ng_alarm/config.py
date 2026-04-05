@@ -23,9 +23,13 @@ from .const import (
     CONF_HOME_TRIGGER_STATES,
     CONF_IGNORE_UNAVAILABLE_STATES,
     CONF_IGNORE_UNKNOWN_STATES,
+    CONF_EXPOSE_EVENT_LOG_SENSOR,
+    CONF_MODE_ALARM_DURATION,
+    CONF_MODE_TIMEOUT_ACTION,
     CONF_MODES,
     CONF_REQUIRE_CODE_TO_ARM,
     CONF_SENSOR_RULES,
+    CONF_SENSOR_TRIGGER_ON_OPEN_ONLY,
     CONF_SENSOR_TRIGGER_UNKNOWN_UNAVAILABLE,
     CONF_USERS,
     CONF_USER_CAN_ARM,
@@ -50,6 +54,7 @@ class NGAlarmRuntime:
     store: Store
     config: dict[str, Any]
     entity: Any | None = None
+    event_sensor: Any | None = None
 
 
 def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
@@ -75,6 +80,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     data["name"] = str(data.get("name") or DEFAULTS["name"])
     data["bypass_state"] = str(data.get("bypass_state") or DEFAULTS["bypass_state"])
     data[CONF_REQUIRE_CODE_TO_ARM] = bool(data.get(CONF_REQUIRE_CODE_TO_ARM, True))
+    data[CONF_EXPOSE_EVENT_LOG_SENSOR] = bool(data.get(CONF_EXPOSE_EVENT_LOG_SENSOR, False))
 
     mode = str(data.get(CONF_BYPASS_MODE) or BYPASS_MODE_ENTITY_STATE)
     data[CONF_BYPASS_MODE] = (
@@ -120,6 +126,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
             bypass_mode = "none"
         exit_delay = mode.get("exit_delay", DEFAULTS.get("exit_delay_away", 60))
         entry_delay = mode.get("entry_delay", DEFAULTS.get("entry_delay_away", 30))
+        alarm_duration = mode.get(CONF_MODE_ALARM_DURATION, 0)
         try:
             exit_delay = max(0, int(exit_delay))
         except (TypeError, ValueError):
@@ -128,6 +135,10 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
             entry_delay = max(0, int(entry_delay))
         except (TypeError, ValueError):
             entry_delay = 30
+        try:
+            alarm_duration = max(0, int(alarm_duration or 0))
+        except (TypeError, ValueError):
+            alarm_duration = 0
 
         modes.append(
             {
@@ -138,6 +149,8 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                 "require_code_to_arm": require_code_to_arm,
                 "exit_delay": exit_delay,
                 "entry_delay": entry_delay,
+                CONF_MODE_ALARM_DURATION: alarm_duration,
+                CONF_MODE_TIMEOUT_ACTION: str(mode.get(CONF_MODE_TIMEOUT_ACTION, "none") or "none").strip().lower(),
                 "bypass_mode": bypass_mode,
                 "bypass_entities": bypass_entities,
                 "bypass_state": bypass_state,
@@ -160,6 +173,9 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                 "bypass_modes": [str(v).strip().lower() for v in rule.get("bypass_modes", []) if str(v).strip()],
                 "allow_open_arm": bool(rule.get("allow_open_arm", False)),
                 "trigger_on_close_only": bool(rule.get("trigger_on_close_only", False)),
+                CONF_SENSOR_TRIGGER_ON_OPEN_ONLY: bool(
+                    rule.get(CONF_SENSOR_TRIGGER_ON_OPEN_ONLY, False)
+                ),
                 "trigger_unknown": bool(rule.get("trigger_unknown", False)),
                 "trigger_unavailable": bool(rule.get("trigger_unavailable", False)),
                 CONF_SENSOR_TRIGGER_UNKNOWN_UNAVAILABLE: bool(

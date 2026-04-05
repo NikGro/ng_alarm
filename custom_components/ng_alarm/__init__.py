@@ -14,7 +14,7 @@ from .panel import async_setup_panel
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.ALARM_CONTROL_PANEL]
+PLATFORMS = [Platform.ALARM_CONTROL_PANEL, Platform.SENSOR]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:

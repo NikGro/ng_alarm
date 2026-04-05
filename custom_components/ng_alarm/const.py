@@ -26,6 +26,8 @@ CONF_REQUIRE_CODE_TO_ARM = "require_code_to_arm"
 CONF_MODES = "modes"
 CONF_SENSOR_RULES = "sensor_rules"
 CONF_SENSOR_TRIGGER_UNKNOWN_UNAVAILABLE = "trigger_unknown_unavailable"
+CONF_SENSOR_TRIGGER_ON_OPEN_ONLY = "trigger_on_open_only"
+CONF_EXPOSE_EVENT_LOG_SENSOR = "expose_event_log_sensor"
 CONF_EXIT_DELAY_AWAY = "exit_delay_away"
 CONF_ENTRY_DELAY_AWAY = "entry_delay_away"
 CONF_EXIT_DELAY_HOME = "exit_delay_home"
@@ -65,6 +67,8 @@ CONF_ACTION_THROUGH = "through"
 CONF_ACTION_BY_USER = "by_user"
 CONF_ACTION_SCRIPTS = "scripts"
 CONF_ACTION_TARGETS = "targets"
+CONF_MODE_ALARM_DURATION = "alarm_duration"
+CONF_MODE_TIMEOUT_ACTION = "timeout_action"
 
 BYPASS_MODE_ENTITY_STATE = "entity_state"
 BYPASS_MODE_TEMPLATE = "template"
@@ -80,6 +84,7 @@ DEFAULTS: dict = {
     CONF_REQUIRE_CODE_TO_ARM: True,
     CONF_MODES: [],
     CONF_SENSOR_RULES: [],
+    CONF_EXPOSE_EVENT_LOG_SENSOR: False,
     CONF_EXIT_DELAY_AWAY: 60,
     CONF_ENTRY_DELAY_AWAY: 30,
     CONF_EXIT_DELAY_HOME: 30,

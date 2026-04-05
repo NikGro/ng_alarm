@@ -146,10 +146,12 @@ class HAPanelNGAlarm extends HTMLElement {
 
         <div id="events" class="section">
           <ha-card header="Event Log">
-            <div style="display:flex;gap:8px;margin-bottom:10px">
+            <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
               <button id="events-refresh" class="btn" type="button">Refresh</button>
+              <button id="events-export" class="btn" type="button">Export JSON</button>
               <button id="events-clear" class="btn danger" type="button">Clear</button>
             </div>
+            <div id="events-sensor-toggle" style="margin-bottom:10px"></div>
             <div id="events-list"></div>
           </ha-card>
         </div>
@@ -178,7 +180,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("sensors-add").addEventListener("click", () => {
       const rules = [...(this._data.sensor_rules || [])];
-      rules.push({ entity_id: "", modes: [], bypass_modes: [], allow_open_arm: false, trigger_on_close_only: false, trigger_unknown: false, trigger_unavailable: false });
+      rules.push({ entity_id: "", modes: [], bypass_modes: [], allow_open_arm: false, trigger_on_open_only: false, trigger_unknown_unavailable: false });
       this._data.sensor_rules = rules;
       this._renderSensors();
     });
@@ -198,6 +200,7 @@ class HAPanelNGAlarm extends HTMLElement {
     });
 
     this.shadowRoot.getElementById("events-refresh").addEventListener("click", () => this._loadEvents());
+    this.shadowRoot.getElementById("events-export").addEventListener("click", () => this._exportEvents());
     this.shadowRoot.getElementById("events-clear").addEventListener("click", () => this._clearEvents());
   }
 
@@ -260,7 +263,9 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ select: { mode: "dropdown", options: [{ value: "away", label: "Away" }, { value: "home", label: "Home" }, { value: "night", label: "Night" }, { value: "vacation", label: "Vacation" }] } }, mode.arm_target || "away", (v) => upd({ arm_target: v }), "Arm type"),
         this._sel({ boolean: {} }, !!mode.require_code_to_arm, (v) => upd({ require_code_to_arm: !!v }), "Code required for arming"),
         this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, mode.exit_delay ?? 60, (v) => upd({ exit_delay: Number(v || 0) }), "Exit delay"),
-        this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, mode.entry_delay ?? 30, (v) => upd({ entry_delay: Number(v || 0) }), "Entry delay"),
+        this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, mode.entry_delay ?? 30, (v) => upd({ entry_delay: Number(v || 0) }), "Pending (entry) delay"),
+        this._sel({ number: { min: 0, max: 3600, step: 1, mode: "box", unit_of_measurement: "s" } }, mode.alarm_duration ?? 0, (v) => upd({ alarm_duration: Number(v || 0) }), "Alarm duration (0 = infinite)"),
+        this._sel({ select: { mode: "dropdown", options: [{ value: "none", label: "No timeout action" }, { value: "disarm", label: "Disarm after duration" }, { value: "rearm", label: "Re-arm same mode after duration" }] } }, mode.timeout_action || "none", (v) => upd({ timeout_action: v || "none" }), "After alarm duration"),
         this._sel({ select: { mode: "dropdown", options: [{ value: "none", label: "No bypass" }, { value: "entity_state", label: "Entity state" }, { value: "template", label: "Template" }] } }, mode.bypass_mode || "none", (v) => { upd({ bypass_mode: v }); this._renderModes(); }, "Bypass mode"),
       );
 
@@ -336,7 +341,7 @@ class HAPanelNGAlarm extends HTMLElement {
       row.append(
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.bypass_modes || [], (v) => upd({ bypass_modes: v || [] }), "Modes bypassed when bypass is active"),
         this._sel({ boolean: {} }, !rule.allow_open_arm, (v) => upd({ allow_open_arm: !v }), "Prohibit arming when open"),
-        this._sel({ boolean: {} }, !!rule.trigger_on_close_only, (v) => upd({ trigger_on_close_only: !!v }), "Trigger only when closing"),
+        this._sel({ boolean: {} }, !!rule.trigger_on_open_only, (v) => upd({ trigger_on_open_only: !!v }), "Trigger only when opening"),
         this._sel({ boolean: {} }, !!rule.trigger_unknown_unavailable, (v) => upd({ trigger_unknown_unavailable: !!v }), "Trigger when becomes unknown OR unavailable"),
       );
 
@@ -479,6 +484,7 @@ class HAPanelNGAlarm extends HTMLElement {
       this._data = {
         name: "NG Alarm",
         require_code_to_arm: true,
+        expose_event_log_sensor: false,
         modes: [],
         sensor_rules: [],
         users: [],
@@ -490,11 +496,39 @@ class HAPanelNGAlarm extends HTMLElement {
       this._renderSensors();
       this._renderUsers();
       this._renderActions();
+      this._renderEventSensorToggle();
 
       this._status("Configuration loaded.");
     } catch (err) {
       this._status(`Load failed: ${err.message}`);
     }
+  }
+
+  _renderEventSensorToggle() {
+    const host = this.shadowRoot.getElementById("events-sensor-toggle");
+    if (!host) return;
+    host.innerHTML = "";
+    host.append(
+      this._sel(
+        { boolean: {} },
+        !!this._data.expose_event_log_sensor,
+        (v) => {
+          this._data.expose_event_log_sensor = !!v;
+        },
+        "Expose event log as sensor"
+      )
+    );
+  }
+
+  _exportEvents() {
+    const content = JSON.stringify(this._events || [], null, 2);
+    const blob = new Blob([content], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ng_alarm_events_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async _loadEvents() {
