@@ -148,13 +148,17 @@ class HAPanelNGAlarm extends HTMLElement {
           color: var(--primary-text-color);
           padding: 8px 12px;
           cursor:pointer;
+          transition: filter 120ms ease, transform 80ms ease, box-shadow 120ms ease;
         }
         .btn.primary { border:none; background: var(--primary-color); color:white; font-weight:600; border-radius: 999px; }
-        .btn.pill-gray { border:none; background: var(--secondary-background-color); color: var(--primary-text-color); border-radius: 999px; }
+        .btn.pill-gray { border:none; background: #5f6368; color: #fff; border-radius: 999px; }
         .btn-save { min-height: 44px; padding: 10px 18px; font-size: 1rem; white-space: nowrap; min-width: 170px; }
         .btn.danger { border:none; background:#b00020; color:#fff; margin-top: 0; border-radius: 999px; }
         .btn.danger-soft { border:none; background:#b00020; color:#fff; border-radius: 10px; }
+        .btn:hover { filter: brightness(0.96); }
+        .btn:active { transform: scale(0.98); filter: brightness(0.9); }
         .item .btn.danger { margin-top: 10px; }
+        .item .btn.danger, .item .btn.danger-soft { margin-top: 18px; }
         #events .btn.danger { margin-top: 0; }
         #modes-add, #global-bypass-add, #sensors-add, #users-add, #actions-add { margin-top: 10px; }
         #events-list .item { margin-bottom: 10px; line-height: 1.35; }
@@ -222,65 +226,65 @@ class HAPanelNGAlarm extends HTMLElement {
           <button id="open-sidebar" class="menu-btn" type="button" title="Open sidebar" aria-label="Open sidebar">
             <ha-icon icon="mdi:menu"></ha-icon>
           </button>
-          <div class="head-title">Alarm</div>
+          <div class="head-title">${this._t("Alarm", "Alarm")}</div>
           <div class="head-spacer"></div>
           <div class="head-version" id="header-version">v–</div>
         </div>
 
         <div class="tabs">
-          <button class="tab" data-tab="general"><ha-icon icon="mdi:cog-outline"></ha-icon>General</button>
-          <button class="tab" data-tab="modes"><ha-icon icon="mdi:shape-outline"></ha-icon>Zones</button>
-          <button class="tab" data-tab="sensors"><ha-icon icon="mdi:motion-sensor"></ha-icon>Sensors</button>
-          <button class="tab" data-tab="users"><ha-icon icon="mdi:account-outline"></ha-icon>Users</button>
-          <button class="tab" data-tab="actions"><ha-icon icon="mdi:script-text-outline"></ha-icon>Actions</button>
-          <button class="tab" data-tab="events"><ha-icon icon="mdi:history"></ha-icon>Events</button>
+          <button class="tab" data-tab="general"><ha-icon icon="mdi:cog-outline"></ha-icon>${this._t("General", "Allgemein")}</button>
+          <button class="tab" data-tab="modes"><ha-icon icon="mdi:shape-outline"></ha-icon>${this._t("Zones", "Zonen")}</button>
+          <button class="tab" data-tab="sensors"><ha-icon icon="mdi:motion-sensor"></ha-icon>${this._t("Sensors", "Sensoren")}</button>
+          <button class="tab" data-tab="users"><ha-icon icon="mdi:account-outline"></ha-icon>${this._t("Users", "Benutzer")}</button>
+          <button class="tab" data-tab="actions"><ha-icon icon="mdi:script-text-outline"></ha-icon>${this._t("Actions", "Aktionen")}</button>
+          <button class="tab" data-tab="events"><ha-icon icon="mdi:history"></ha-icon>${this._t("Events", "Ereignisse")}</button>
         </div>
 
         <div id="general" class="section">
-          <ha-card header="General Settings">
-            <div class="muted" style="margin-bottom:8px">Choose how users enter their code in the alarm panel.</div>
+          <ha-card header="${this._t("General Settings", "Allgemeine Einstellungen")}">
+            <div class="muted" style="margin-bottom:8px">${this._t("Choose how users enter their code in the alarm panel.", "Wählen Sie, wie Benutzer ihren Code im Alarm-Panel eingeben.")}</div>
             <div id="general-settings-list" class="list"></div>
           </ha-card>
         </div>
 
         <div id="modes" class="section">
-          <ha-card header="Zones">
+          <ha-card header="${this._t("Zones", "Zonen")}">
             <div class="muted card-subtitle" id="zones-help">Each zone can expose one or more native arm types and has its own delays/bypass settings.</div>
             <div id="modes-list" class="list" style="margin-top:10px"></div>
-            <button id="modes-add" class="btn" type="button">+ Add zone</button>
+            <button id="modes-add" class="btn" type="button">${this._t("+ Add zone", "+ Zone hinzufügen")}</button>
           </ha-card>
         </div>
 
         <div id="sensors" class="section">
-          <ha-card header="Global Bypass Rules">
-            <div class="muted card-subtitle">Global bypass elements can be reused by multiple sensors.</div>
+          <ha-card header="${this._t("Global Bypass Rules", "Globale Bypass-Regeln")}">
+            <div class="muted card-subtitle">${this._t("Global bypass elements can be reused by multiple sensors.", "Globale Bypass-Elemente können von mehreren Sensoren verwendet werden.")}</div>
             <div id="global-bypass-list" class="list" style="margin-top:10px"></div>
-            <button id="global-bypass-add" class="btn" type="button">+ Add global bypass</button>
+            <button id="global-bypass-add" class="btn" type="button">${this._t("+ Add global bypass", "+ Globalen Bypass hinzufügen")}</button>
           </ha-card>
-          <ha-card header="Sensors">
-            <div class="muted card-subtitle">Per sensor zones, bypass and trigger flags</div>
+          <ha-card header="${this._t("Sensors", "Sensoren")}">
+            <div class="muted card-subtitle">${this._t("Per sensor zones, bypass and trigger flags", "Pro Sensor: Zonen, Bypass und Trigger-Flags")}</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-              <button id="sensors-add-all-motion" class="btn" type="button">+ Add all motion / occupancy</button>
-              <button id="sensors-add-all-door" class="btn" type="button">+ Add all door / window</button>
+              <button id="sensors-add-all-motion" class="btn" type="button">${this._t("+ Add all motion / occupancy", "+ Alle Bewegungs-/Präsenzsensoren hinzufügen")}</button>
+              <button id="sensors-add-all-door" class="btn" type="button">${this._t("+ Add all door / window", "+ Alle Tür-/Fenstersensoren hinzufügen")}</button>
             </div>
             <div id="sensors-list" class="list" style="margin-top:10px"></div>
-            <button id="sensors-add" class="btn" type="button">+ Add sensor</button>
+            <button id="sensors-add" class="btn" type="button">${this._t("+ Add sensor", "+ Sensor hinzufügen")}</button>
           </ha-card>
         </div>
 
         <div id="users" class="section">
-          <ha-card header="Users & Codes">
-            <div class="muted" style="margin-bottom:8px">Manage users, permissions and which zones each code may control.</div>
+          <ha-card header="${this._t("Users & Codes", "Benutzer & Codes")}">
+            <div class="muted" style="margin-bottom:8px">${this._t("Manage users, permissions and which zones each code may control.", "Verwalten Sie Benutzer, Berechtigungen und welche Zonen jeder Code steuern darf.")}</div>
             <div id="users-list" class="list"></div>
-            <button id="users-add" class="btn" type="button">+ Add user</button>
+            <button id="users-add" class="btn" type="button">${this._t("+ Add user", "+ Benutzer hinzufügen")}</button>
           </ha-card>
         </div>
 
         <div id="actions" class="section">
-          <ha-card header="Action Builder">
-            <div class="muted" style="margin-bottom:8px">Define what should run when the alarm changes state.</div>
+          <ha-card header="${this._t("Action Builder", "Aktions-Builder")}">
+            <div class="muted" style="margin-bottom:8px">${this._t("Define what should run when the alarm changes state.", "Definieren Sie, was beim Zustandswechsel des Alarms ausgeführt wird.")}</div>
             <div id="actions-list" class="list"></div>
-            <button id="actions-add" class="btn" type="button">+ Add action</button>
+            <button id="actions-add" class="btn" type="button">${this._t("+ Add action", "+ Aktion hinzufügen")}</button>
             <div class="muted card-subtitle" style="margin-top:10px">
               Script/target variables available: <code>from_state</code>, <code>to_state</code>, <code>alarm_mode</code>, <code>zone</code>, <code>arm_type</code>, <code>actor</code>, <code>triggered_sensor</code>, <code>triggered_sensor_name</code>.
             </div>
@@ -288,15 +292,15 @@ class HAPanelNGAlarm extends HTMLElement {
         </div>
 
         <div id="events" class="section">
-          <ha-card header="Event Log">
-            <div class="muted" style="margin-bottom:8px">Review alarm history across all zones and export or clear entries.</div>
+          <ha-card header="${this._t("Event Log", "Ereignisprotokoll")}">
+            <div class="muted" style="margin-bottom:8px">${this._t("Review alarm history across all zones and export or clear entries.", "Prüfen Sie den Alarmverlauf über alle Zonen und exportieren oder löschen Sie Einträge.")}</div>
             <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
               <select id="events-zone" class="btn" style="min-width:140px">
                 <option value="all">All zones</option>
               </select>
-              <button id="events-refresh" class="btn" type="button">Refresh</button>
-              <button id="events-export" class="btn" type="button">Export JSON</button>
-              <button id="events-clear" class="btn danger-soft" type="button">Clear</button>
+              <button id="events-refresh" class="btn" type="button">${this._t("Refresh", "Aktualisieren")}</button>
+              <button id="events-export" class="btn" type="button">${this._t("Export JSON", "JSON exportieren")}</button>
+              <button id="events-clear" class="btn danger-soft" type="button">${this._t("Clear", "Leeren")}</button>
             </div>
             <div id="events-sensor-toggle" style="margin-bottom:10px"></div>
             <div id="events-list"></div>
@@ -304,7 +308,7 @@ class HAPanelNGAlarm extends HTMLElement {
         </div>
 
         <div class="footer">
-          <button id="save" class="btn primary btn-save">Save & Reload</button>
+          <button id="save" class="btn primary btn-save">${this._t("Save & Reload", "Speichern & Neu laden")}</button>
           <div class="muted" id="status"></div>
         </div>
       </div>
@@ -598,7 +602,7 @@ class HAPanelNGAlarm extends HTMLElement {
       const del = document.createElement("button");
       del.className = "btn danger";
       del.type = "button";
-      del.textContent = "Delete zone";
+      del.textContent = this._t("Delete zone", "Zone löschen");
       del.addEventListener("click", () => {
         const modes = [...(this._data.modes || [])];
         modes.splice(idx, 1);
@@ -683,7 +687,7 @@ class HAPanelNGAlarm extends HTMLElement {
       const test = document.createElement("button");
       test.className = "btn primary";
       test.type = "button";
-      test.textContent = "Test condition";
+      test.textContent = this._t("Test condition", "Bedingung testen");
       const testResult = document.createElement("span");
       testResult.className = "inline-test-result";
       test.addEventListener("click", async () => {
@@ -691,13 +695,13 @@ class HAPanelNGAlarm extends HTMLElement {
         const result = await this._testGlobalBypassRule(current);
         testResult.classList.remove("ok", "err");
         testResult.classList.add(result ? "ok" : "err");
-        testResult.textContent = result ? "ACTIVE" : "inactive";
+        testResult.textContent = result ? this._t("ACTIVE", "AKTIV") : this._t("inactive", "inaktiv");
       });
 
       const del = document.createElement("button");
       del.className = "btn danger";
       del.type = "button";
-      del.textContent = "Delete global bypass";
+      del.textContent = this._t("Delete global bypass", "Globalen Bypass löschen");
       del.addEventListener("click", () => {
         const arr = [...(this._data.global_bypass_rules || [])];
         arr.splice(idx, 1);
@@ -919,7 +923,7 @@ class HAPanelNGAlarm extends HTMLElement {
       const del = document.createElement("button");
       del.className = "btn danger";
       del.type = "button";
-      del.textContent = "Delete sensor rule";
+      del.textContent = this._t("Delete sensor rule", "Sensorregel löschen");
       del.addEventListener("click", () => {
         const rules = [...(this._data.sensor_rules || [])];
         rules.splice(idx, 1);
@@ -931,7 +935,7 @@ class HAPanelNGAlarm extends HTMLElement {
       const copyBtn = document.createElement("button");
       copyBtn.className = "btn pill-gray";
       copyBtn.type = "button";
-      copyBtn.textContent = "Copy config";
+      copyBtn.textContent = this._t("Copy config", "Konfiguration kopieren");
       copyBtn.addEventListener("click", () => {
         const current = (this._data.sensor_rules || [])[idx] || {};
         this._sensorConfigClipboard = {
@@ -942,22 +946,27 @@ class HAPanelNGAlarm extends HTMLElement {
           trigger_on_open_only: !!current.trigger_on_open_only,
           trigger_unknown_unavailable: !!current.trigger_unknown_unavailable,
         };
-        this._status("Sensor config copied.", "ok");
-        this._flashButtonText(copyBtn, "Copied!", 1200);
+        this._status(this._t("Sensor config copied.", "Sensor-Konfiguration kopiert."), "ok");
+        this._flashButtonText(
+          copyBtn,
+          this._t("Copied!", "Kopiert!"),
+          1200,
+          this._t("Copy config", "Konfiguration kopieren")
+        );
       });
 
       const pasteBtn = document.createElement("button");
       pasteBtn.className = "btn pill-gray";
       pasteBtn.type = "button";
-      pasteBtn.textContent = "Paste config";
+      pasteBtn.textContent = this._t("Paste config", "Konfiguration einfügen");
       pasteBtn.addEventListener("click", () => {
         if (!this._sensorConfigClipboard) {
-          this._status("No copied sensor config available.", "error");
+          this._status(this._t("No copied sensor config available.", "Keine kopierte Sensor-Konfiguration verfügbar."), "error");
           return;
         }
         upd({ ...this._sensorConfigClipboard });
         this._renderSensors();
-        this._status("Sensor config pasted.", "ok");
+        this._status(this._t("Sensor config pasted.", "Sensor-Konfiguration eingefügt."), "ok");
         this._scheduleAutosave();
       });
 
@@ -1027,7 +1036,7 @@ class HAPanelNGAlarm extends HTMLElement {
       const del = document.createElement("button");
       del.className = "btn danger";
       del.type = "button";
-      del.textContent = "Delete user";
+      del.textContent = this._t("Delete user", "Benutzer löschen");
       del.addEventListener("click", () => {
         const users = [...(this._data.users || [])];
         users.splice(idx, 1);
@@ -1113,7 +1122,7 @@ class HAPanelNGAlarm extends HTMLElement {
       const del = document.createElement("button");
       del.className = "btn danger";
       del.type = "button";
-      del.textContent = "Delete action";
+      del.textContent = this._t("Delete action", "Aktion löschen");
       del.addEventListener("click", () => {
         const actions = [...(this._data.actions || [])];
         actions.splice(idx, 1);
@@ -1125,7 +1134,7 @@ class HAPanelNGAlarm extends HTMLElement {
       const test = document.createElement("button");
       test.className = "btn pill-gray";
       test.type = "button";
-      test.textContent = "Test action";
+      test.textContent = this._t("Test action", "Aktion testen");
       const testResult = document.createElement("span");
       testResult.className = "inline-test-result";
       test.addEventListener("click", async () => {
@@ -1133,7 +1142,7 @@ class HAPanelNGAlarm extends HTMLElement {
         const ok = await this._runActionTest(current);
         testResult.classList.remove("ok", "err");
         testResult.classList.add(ok ? "ok" : "err");
-        testResult.textContent = ok ? "Executed" : "Failed";
+        testResult.textContent = ok ? this._t("Executed", "Ausgeführt") : this._t("Failed", "Fehlgeschlagen");
       });
 
       const btnRow = document.createElement("div");
@@ -1159,10 +1168,10 @@ class HAPanelNGAlarm extends HTMLElement {
           await this._hass.callService("homeassistant", "turn_on", { entity_id: entityId });
         }
       }
-      this._status("Action test executed.", "ok");
+      this._status(this._t("Action test executed.", "Aktionstest ausgeführt."), "ok");
       return true;
     } catch (err) {
-      this._status(`Action test failed: ${err.message}`, "error");
+      this._status(`${this._t("Action test failed", "Aktionstest fehlgeschlagen")}: ${err.message}`, "error");
       return false;
     }
   }
@@ -1195,10 +1204,10 @@ class HAPanelNGAlarm extends HTMLElement {
       this._updateHeaderVersion();
       this._configLoaded = true;
 
-      this._status("Configuration loaded.");
+      this._status(this._t("Configuration loaded.", "Konfiguration geladen."));
     } catch (err) {
       this._configLoaded = false;
-      this._status(`Load failed: ${err.message}`, "error");
+      this._status(`${this._t("Load failed", "Laden fehlgeschlagen")}: ${err.message}`, "error");
     }
   }
 
@@ -1241,7 +1250,7 @@ class HAPanelNGAlarm extends HTMLElement {
     const sel = this.shadowRoot.getElementById("events-zone");
     if (!sel) return;
     const cur = this._selectedEventZone || "all";
-    sel.innerHTML = `<option value="all">All zones</option>`;
+    sel.innerHTML = `<option value="all">${this._t("All zones", "Alle Zonen")}</option>`;
     (this._eventZones || []).forEach((z) => {
       const o = document.createElement("option");
       o.value = z;
@@ -1280,7 +1289,7 @@ class HAPanelNGAlarm extends HTMLElement {
         host.appendChild(item);
       });
     } catch (err) {
-      this._status(`Events load failed: ${err.message}`, "error");
+      this._status(`${this._t("Events load failed", "Laden der Ereignisse fehlgeschlagen")}: ${err.message}`, "error");
     }
   }
 
@@ -1289,9 +1298,9 @@ class HAPanelNGAlarm extends HTMLElement {
       await this._hass.callApi("post", "ng_alarm/events/clear", { zone: this._selectedEventZone || "all" });
       this._events = [];
       await this._loadEvents();
-      this._status("Event log cleared.", "ok");
+      this._status(this._t("Event log cleared.", "Ereignisprotokoll geleert."), "ok");
     } catch (err) {
-      this._status(`Event clear failed: ${err.message}`, "error");
+      this._status(`${this._t("Event clear failed", "Leeren der Ereignisse fehlgeschlagen")}: ${err.message}`, "error");
     }
   }
 
@@ -1313,13 +1322,23 @@ class HAPanelNGAlarm extends HTMLElement {
       delete payload.panic_code;
 
       await this._hass.callApi("post", "ng_alarm/config", payload);
-      this._status(isAutosave ? "Autosaved." : "Saved and runtime reloaded.", "ok");
+      this._status(
+        isAutosave
+          ? this._t("Autosaved.", "Automatisch gespeichert.")
+          : this._t("Saved and runtime reloaded.", "Gespeichert und Laufzeit neu geladen."),
+        "ok"
+      );
       if (!isAutosave) {
         const saveBtn = this.shadowRoot.getElementById("save");
-        this._flashButtonText(saveBtn, "Saved!", 1400, "Save & Reload");
+        this._flashButtonText(
+          saveBtn,
+          this._t("Saved!", "Gespeichert!"),
+          1400,
+          this._t("Save & Reload", "Speichern & Neu laden")
+        );
       }
     } catch (err) {
-      this._status(`Save failed: ${err.message}`, "error");
+      this._status(`${this._t("Save failed", "Speichern fehlgeschlagen")}: ${err.message}`, "error");
     } finally {
       this._autosaveInFlight = false;
     }
