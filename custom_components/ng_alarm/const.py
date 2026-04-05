@@ -63,6 +63,7 @@ CONF_USER_CODE = "code"
 CONF_USER_CAN_ARM = "can_arm"
 CONF_USER_CAN_DISARM = "can_disarm"
 CONF_USER_CAN_PANIC = "can_panic"
+CONF_USER_CAN_ARM_OVERRIDE = "can_arm_override"
 CONF_USER_ARM_MODES = "arm_modes"
 CONF_USER_DISARM_MODES = "disarm_modes"
 

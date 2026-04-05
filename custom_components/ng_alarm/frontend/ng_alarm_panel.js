@@ -151,7 +151,7 @@ class HAPanelNGAlarm extends HTMLElement {
           transition: filter 120ms ease, transform 80ms ease, box-shadow 120ms ease;
         }
         .btn.primary { border:none; background: var(--primary-color); color:white; font-weight:600; border-radius: 999px; }
-        .btn.pill-gray { border:none; background: #5f6368; color: #fff; border-radius: 999px; }
+        .btn.pill-gray { border:none; background: #474c52; color: #fff; border-radius: 999px; }
         .btn-save { min-height: 44px; padding: 10px 18px; font-size: 1rem; white-space: nowrap; min-width: 170px; }
         .btn.danger { border:none; background:#b00020; color:#fff; margin-top: 0; border-radius: 999px; }
         .btn.danger-soft { border:none; background:#b00020; color:#fff; border-radius: 10px; }
@@ -386,7 +386,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("users-add").addEventListener("click", () => {
       const users = [...(this._data.users || [])];
-      users.push({ name: "", code: "", can_arm: true, can_disarm: true, can_panic: false, arm_modes: [], disarm_modes: [] });
+      users.push({ name: "", code: "", can_arm: true, can_arm_override: false, can_disarm: true, can_panic: false, arm_modes: [], disarm_modes: [] });
       this._data.users = users;
       this._renderUsers();
       this._scheduleAutosave();
@@ -685,17 +685,18 @@ class HAPanelNGAlarm extends HTMLElement {
       }
 
       const test = document.createElement("button");
-      test.className = "btn primary";
+      test.className = "btn pill-gray";
       test.type = "button";
       test.textContent = this._t("Test condition", "Bedingung testen");
-      const testResult = document.createElement("span");
-      testResult.className = "inline-test-result";
       test.addEventListener("click", async () => {
         const current = (this._data.global_bypass_rules || [])[idx] || {};
         const result = await this._testGlobalBypassRule(current);
-        testResult.classList.remove("ok", "err");
-        testResult.classList.add(result ? "ok" : "err");
-        testResult.textContent = result ? this._t("ACTIVE", "AKTIV") : this._t("inactive", "inaktiv");
+        this._flashButtonText(
+          test,
+          result ? this._t("Active", "Aktiv") : this._t("Inactive", "Inaktiv"),
+          1400,
+          this._t("Test condition", "Bedingung testen")
+        );
       });
 
       const del = document.createElement("button");
@@ -715,7 +716,7 @@ class HAPanelNGAlarm extends HTMLElement {
       btnRow.className = "global-btn-row";
       const btnTop = document.createElement("div");
       btnTop.className = "global-btn-top";
-      btnTop.append(test, testResult);
+      btnTop.append(test);
       const btnDelete = document.createElement("div");
       btnDelete.className = "global-btn-delete";
       btnDelete.append(del);
@@ -1027,6 +1028,7 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ text: {} }, u.name || "", (v) => upd({ name: v }), "Name"),
         this._sel({ text: { type: "password" } }, u.code || "", (v) => upd({ code: v }), "Code"),
         this._sel({ boolean: {} }, !!u.can_arm, (v) => upd({ can_arm: !!v }), "Can arm"),
+        this._sel({ boolean: {} }, !!u.can_arm_override, (v) => upd({ can_arm_override: !!v }), this._t("Can arm with override", "Kann mit Override scharf schalten")),
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.arm_modes || [], (v) => upd({ arm_modes: v || [] }), "Arm modes"),
         this._sel({ boolean: {} }, !!u.can_disarm, (v) => upd({ can_disarm: !!v }), "Can disarm"),
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.disarm_modes || [], (v) => upd({ disarm_modes: v || [] }), "Disarm modes"),

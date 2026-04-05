@@ -69,6 +69,7 @@ from .const import (
     CONF_TRIGGERED_SCRIPTS,
     CONF_USERS,
     CONF_USER_CAN_ARM,
+    CONF_USER_CAN_ARM_OVERRIDE,
     CONF_USER_CAN_DISARM,
     CONF_USER_CAN_PANIC,
     CONF_USER_ARM_MODES,
@@ -179,6 +180,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._alarm_duration_unsub = None
         self._sensor_unsub = None
         self._bypass_unsub = None
+        self._arm_override_requested = False
 
     def _apply_code_format(self) -> None:
         mode = str(self._config.get(CONF_CODE_INPUT_MODE, "pin") or "pin").strip().lower()
@@ -413,6 +415,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         return action
 
     def _authorize_arm(self, code: str | None, mode_id: str) -> str | None:
+        self._arm_override_requested = False
         target_mode_cfg = self._mode_config(mode_id) or {}
         current_mode_cfg = self._mode_config(self._current_mode_id) or target_mode_cfg
         is_mode_change = self._alarm_state in {
@@ -457,6 +460,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 current_pair = f"{mode_id}:{self._current_arm_type}"
                 if mode_id not in allowed_zone and current_pair not in allowed_pairs:
                     return None
+            self._arm_override_requested = bool(user.get(CONF_USER_CAN_ARM_OVERRIDE, False))
             return self._actor_name(user)
 
         # No legacy master code path.
@@ -932,15 +936,25 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 blocking.append(entity_id)
 
         if blocking:
-            await self._async_log_event(
-                "arm_blocked",
-                "Arming blocked due to open sensors",
-                from_state=prev,
-                to_state=prev,
-                by=self._last_actor,
-                sensors=blocking,
-            )
-            return
+            if self._arm_override_requested:
+                await self._async_log_event(
+                    "arm_override",
+                    "Arming override used despite open sensors",
+                    from_state=prev,
+                    to_state="arming" if delay > 0 else _state_str(mode),
+                    by=self._last_actor,
+                    sensors=blocking,
+                )
+            else:
+                await self._async_log_event(
+                    "arm_blocked",
+                    "Arming blocked due to open sensors",
+                    from_state=prev,
+                    to_state=prev,
+                    by=self._last_actor,
+                    sensors=blocking,
+                )
+                return
 
         self._alarm_state = AlarmControlPanelState.ARMING if delay > 0 else mode
         self.async_write_ha_state()
