@@ -142,8 +142,13 @@ class HAPanelNGAlarm extends HTMLElement {
         </div>
 
         <div id="sensors" class="section">
+          <ha-card header="Global Bypass Rules">
+            <div class="muted">Global bypass elements can be reused by multiple sensors.</div>
+            <div id="global-bypass-list" class="list" style="margin-top:10px"></div>
+            <button id="global-bypass-add" class="btn" type="button">+ Add global bypass</button>
+          </ha-card>
           <ha-card header="Sensors">
-            <div class="muted">Pro Sensor Zonen, Bypass und Trigger-Flags</div>
+            <div class="muted">Per sensor zones, bypass and trigger flags</div>
             <div id="sensors-list" class="list" style="margin-top:10px"></div>
             <button id="sensors-add" class="btn" type="button">+ Add sensor</button>
           </ha-card>
@@ -207,9 +212,17 @@ class HAPanelNGAlarm extends HTMLElement {
       this._renderModes();
     });
 
+    this.shadowRoot.getElementById("global-bypass-add").addEventListener("click", () => {
+      const rules = [...(this._data.global_bypass_rules || [])];
+      rules.push({ id: "", name: "", icon: "mdi:swap-horizontal", mode: "entity_state", entities: [], template: "" });
+      this._data.global_bypass_rules = rules;
+      this._renderGlobalBypass();
+      this._renderSensors();
+    });
+
     this.shadowRoot.getElementById("sensors-add").addEventListener("click", () => {
       const rules = [...(this._data.sensor_rules || [])];
-      rules.push({ entity_id: "", modes: [], bypass_modes: [], allow_open_arm: false, trigger_on_open_only: false, trigger_unknown_unavailable: false });
+      rules.push({ entity_id: "", modes: [], bypass_modes: [], bypass_global_ids: [], allow_open_arm: false, trigger_on_open_only: false, trigger_unknown_unavailable: false });
       this._data.sensor_rules = rules;
       this._renderSensors();
     });
@@ -266,6 +279,13 @@ class HAPanelNGAlarm extends HTMLElement {
 
   _modeOptions() {
     return (this._data.modes || []).map((m) => ({ value: m.id || "", label: m.name || m.id || "zone" }));
+  }
+
+  _globalBypassOptions() {
+    return (this._data.global_bypass_rules || []).map((r) => ({
+      value: r.id || "",
+      label: r.name || r.id || "global bypass",
+    })).filter((x) => x.value);
   }
 
   _zoneModeOptions() {
@@ -356,11 +376,70 @@ class HAPanelNGAlarm extends HTMLElement {
     });
   }
 
+  _renderGlobalBypass() {
+    const host = this.shadowRoot.getElementById("global-bypass-list");
+    if (!host) return;
+    host.innerHTML = "";
+
+    (this._data.global_bypass_rules || []).forEach((rule, idx) => {
+      const item = document.createElement("div");
+      item.className = "item";
+      const details = document.createElement("details");
+      details.open = !rule.name;
+      const summary = document.createElement("summary");
+      summary.innerHTML = `<ha-icon icon="${rule.icon || "mdi:swap-horizontal"}"></ha-icon> ${rule.name || rule.id || `Global bypass #${idx + 1}`}`;
+      details.appendChild(summary);
+
+      const row = document.createElement("div");
+      row.className = "row";
+      const upd = (patch) => {
+        const arr = [...(this._data.global_bypass_rules || [])];
+        const next = { ...arr[idx], ...patch };
+        if (typeof next.id === "string") next.id = next.id.trim().toLowerCase().replace(/\s+/g, "_");
+        arr[idx] = next;
+        this._data.global_bypass_rules = arr;
+        summary.innerHTML = `<ha-icon icon="${next.icon || "mdi:swap-horizontal"}"></ha-icon> ${next.name || next.id || `Global bypass #${idx + 1}`}`;
+      };
+
+      row.append(
+        this._sel({ text: {} }, rule.id || "", (v) => upd({ id: v }), "ID"),
+        this._sel({ text: {} }, rule.name || "", (v) => upd({ name: v }), "Name"),
+        this._sel({ icon: {} }, rule.icon || "mdi:swap-horizontal", (v) => upd({ icon: v }), "Icon"),
+        this._sel({ select: { mode: "dropdown", options: [{ value: "entity_state", label: "Entities" }, { value: "template", label: "Template" }] } }, rule.mode || "entity_state", (v) => { upd({ mode: v }); this._renderGlobalBypass(); }, "Rule type"),
+      );
+
+      const rmode = rule.mode || "entity_state";
+      if (rmode === "entity_state") {
+        row.append(this._sel({ entity: { multiple: true } }, rule.entities || [], (v) => upd({ entities: v || [] }), "Entities (truthy => active)"));
+      } else {
+        row.append(this._sel({ template: {} }, rule.template || "", (v) => upd({ template: v }), "Template"));
+      }
+
+      const del = document.createElement("button");
+      del.className = "btn danger";
+      del.type = "button";
+      del.textContent = "Delete global bypass";
+      del.addEventListener("click", () => {
+        const arr = [...(this._data.global_bypass_rules || [])];
+        arr.splice(idx, 1);
+        this._data.global_bypass_rules = arr;
+        this._renderGlobalBypass();
+        this._renderSensors();
+      });
+
+      details.appendChild(row);
+      details.appendChild(del);
+      item.appendChild(details);
+      host.appendChild(item);
+    });
+  }
+
   _renderSensors() {
     const host = this.shadowRoot.getElementById("sensors-list");
     if (!host) return;
     host.innerHTML = "";
     const modeOptions = this._zoneModeOptions();
+    const globalBypassOptions = this._globalBypassOptions();
 
     (this._data.sensor_rules || []).forEach((rule, idx) => {
       const item = document.createElement("div");
@@ -397,7 +476,8 @@ class HAPanelNGAlarm extends HTMLElement {
       row.appendChild(sep);
 
       row.append(
-        this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.bypass_modes || [], (v) => upd({ bypass_modes: v || [] }), "Modes bypassed when bypass is active"),
+        this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.bypass_modes || [], (v) => upd({ bypass_modes: v || [] }), "Modes bypassed when zone bypass is active"),
+        this._sel({ select: { multiple: true, mode: "dropdown", options: globalBypassOptions } }, rule.bypass_global_ids || [], (v) => upd({ bypass_global_ids: v || [] }), "Global bypass elements"),
         this._sel({ boolean: {} }, !rule.allow_open_arm, (v) => upd({ allow_open_arm: !v }), "Prohibit arming when open"),
         this._sel({ boolean: {} }, !!rule.trigger_on_open_only, (v) => upd({ trigger_on_open_only: !!v }), "Trigger only when opening"),
         this._sel({ boolean: {} }, !!rule.trigger_unknown_unavailable, (v) => upd({ trigger_unknown_unavailable: !!v }), "Trigger when becomes unknown OR unavailable"),
@@ -554,6 +634,7 @@ class HAPanelNGAlarm extends HTMLElement {
         require_code_to_arm: true,
         expose_event_log_sensor: false,
         modes: [],
+        global_bypass_rules: [],
         sensor_rules: [],
         users: [],
         actions: [],
@@ -561,6 +642,7 @@ class HAPanelNGAlarm extends HTMLElement {
       };
 
       this._renderModes();
+      this._renderGlobalBypass();
       this._renderSensors();
       this._renderUsers();
       this._renderActions();

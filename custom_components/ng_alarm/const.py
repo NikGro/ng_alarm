@@ -25,6 +25,8 @@ CONF_NAME = "name"
 CONF_REQUIRE_CODE_TO_ARM = "require_code_to_arm"
 CONF_MODES = "modes"
 CONF_SENSOR_RULES = "sensor_rules"
+CONF_GLOBAL_BYPASS_RULES = "global_bypass_rules"
+CONF_SENSOR_BYPASS_GLOBAL_IDS = "bypass_global_ids"
 CONF_SENSOR_TRIGGER_UNKNOWN_UNAVAILABLE = "trigger_unknown_unavailable"
 CONF_SENSOR_TRIGGER_ON_OPEN_ONLY = "trigger_on_open_only"
 CONF_EXPOSE_EVENT_LOG_SENSOR = "expose_event_log_sensor"
@@ -84,6 +86,7 @@ DEFAULTS: dict = {
     CONF_REQUIRE_CODE_TO_ARM: True,
     CONF_MODES: [],
     CONF_SENSOR_RULES: [],
+    CONF_GLOBAL_BYPASS_RULES: [],
     CONF_EXPOSE_EVENT_LOG_SENSOR: False,
     CONF_EXIT_DELAY_AWAY: 60,
     CONF_ENTRY_DELAY_AWAY: 30,

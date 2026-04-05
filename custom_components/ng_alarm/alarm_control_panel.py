@@ -48,6 +48,7 @@ from .const import (
     CONF_HOME_ACTIVE_SENSORS,
     CONF_HOME_BYPASS_SENSORS,
     CONF_HOME_TRIGGER_STATES,
+    CONF_GLOBAL_BYPASS_RULES,
     CONF_MODE_ALARM_DURATION,
     CONF_MODE_TIMEOUT_ACTION,
     CONF_IGNORE_UNAVAILABLE_STATES,
@@ -57,6 +58,7 @@ from .const import (
     CONF_PANIC_SCRIPTS,
     CONF_PENDING_SCRIPTS,
     CONF_REQUIRE_CODE_TO_ARM,
+    CONF_SENSOR_BYPASS_GLOBAL_IDS,
     CONF_SENSOR_RULES,
     CONF_SENSOR_TRIGGER_ON_OPEN_ONLY,
     CONF_SENSOR_TRIGGER_UNKNOWN_UNAVAILABLE,
@@ -509,6 +511,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         entities: set[str] = set()
         for mode in self._config.get(CONF_MODES, []) or []:
             entities.update(mode.get("bypass_entities", []) or [])
+        for rule in self._config.get(CONF_GLOBAL_BYPASS_RULES, []) or []:
+            entities.update(rule.get("entities", []) or [])
 
         if entities:
             self._bypass_unsub = async_track_state_change_event(
@@ -526,26 +530,49 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         mode = self._mode_config()
         if mode:
             mode_bypass = str(mode.get("bypass_mode", "none")).lower()
-            if mode_bypass == "none":
-                return False
             if mode_bypass == "template":
                 tpl = str(mode.get("bypass_template", "")).strip()
-                if not tpl:
-                    return False
-                try:
-                    rendered = Template(tpl, self.hass).async_render(parse_result=False)
-                    return result_as_boolean(rendered)
-                except TemplateError as err:
-                    _LOGGER.debug("Bypass template render failed: %s", err)
-                    return False
-
-            for entity_id in mode.get("bypass_entities", []) or []:
-                state = self.hass.states.get(entity_id)
-                if state and str(state.state).lower() in {"on", "true", "1", "home", "open"}:
-                    return True
-            return False
+                if tpl:
+                    try:
+                        rendered = Template(tpl, self.hass).async_render(parse_result=False)
+                        if result_as_boolean(rendered):
+                            return True
+                    except TemplateError as err:
+                        _LOGGER.debug("Bypass template render failed: %s", err)
+            elif mode_bypass == "entity_state":
+                for entity_id in mode.get("bypass_entities", []) or []:
+                    state = self.hass.states.get(entity_id)
+                    if state and str(state.state).lower() in {"on", "true", "1", "home", "open"}:
+                        return True
 
         return False
+
+    def _active_global_bypass_ids(self) -> set[str]:
+        active: set[str] = set()
+        for rule in self._config.get(CONF_GLOBAL_BYPASS_RULES, []) or []:
+            rid = _normalize_mode_id(rule.get("id"))
+            if not rid:
+                continue
+            mode = str(rule.get("mode", "entity_state") or "entity_state").strip().lower()
+            is_active = False
+            if mode == "template":
+                tpl = str(rule.get("template", "")).strip()
+                if tpl:
+                    try:
+                        rendered = Template(tpl, self.hass).async_render(parse_result=False)
+                        is_active = result_as_boolean(rendered)
+                    except TemplateError as err:
+                        _LOGGER.debug("Global bypass template render failed (%s): %s", rid, err)
+                        is_active = False
+            else:
+                for entity_id in rule.get("entities", []) or []:
+                    state = self.hass.states.get(entity_id)
+                    if state and str(state.state).lower() in {"on", "true", "1", "home", "open"}:
+                        is_active = True
+                        break
+            if is_active:
+                active.add(rid)
+        return active
 
     def _trigger_states(self) -> set[str]:
         mode_cfg = self._mode_config()
@@ -576,6 +603,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if rules and self._current_mode_id and self._current_mode_id != UNKNOWN:
             result: list[str] = []
             bypass_active = self._is_bypass_active()
+            active_global_bypass = self._active_global_bypass_ids()
             for rule in rules:
                 entity_id = str(rule.get("entity_id", "")).strip()
                 if not entity_id:
@@ -591,6 +619,14 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                     bypass_ids = {_normalize_mode_id(v.split(":", 1)[0]) for v in bypass_raw}
                     if self._current_mode_id in bypass_ids or current_pair in set(bypass_raw):
                         continue
+
+                global_bypass_ids = {
+                    _normalize_mode_id(v)
+                    for v in rule.get(CONF_SENSOR_BYPASS_GLOBAL_IDS, [])
+                    if str(v).strip()
+                }
+                if global_bypass_ids and (global_bypass_ids & active_global_bypass):
+                    continue
                 result.append(entity_id)
             return result
 
@@ -913,6 +949,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             from_state="triggered" if panic else prev,
             to_state="disarmed",
             by=self._last_actor,
+            is_panic=panic,
         )
         await self._async_run_transition_actions(prev, "disarmed", "panic" if panic else "disarmed")
 

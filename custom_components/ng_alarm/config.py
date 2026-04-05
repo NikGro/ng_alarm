@@ -24,10 +24,12 @@ from .const import (
     CONF_IGNORE_UNAVAILABLE_STATES,
     CONF_IGNORE_UNKNOWN_STATES,
     CONF_EXPOSE_EVENT_LOG_SENSOR,
+    CONF_GLOBAL_BYPASS_RULES,
     CONF_MODE_ALARM_DURATION,
     CONF_MODE_TIMEOUT_ACTION,
     CONF_MODES,
     CONF_REQUIRE_CODE_TO_ARM,
+    CONF_SENSOR_BYPASS_GLOBAL_IDS,
     CONF_SENSOR_RULES,
     CONF_SENSOR_TRIGGER_ON_OPEN_ONLY,
     CONF_SENSOR_TRIGGER_UNKNOWN_UNAVAILABLE,
@@ -168,6 +170,32 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
         )
     data[CONF_MODES] = modes
 
+    global_bypass_rules = []
+    for rule in data.get(CONF_GLOBAL_BYPASS_RULES, []) or []:
+        if not isinstance(rule, dict):
+            continue
+        rid = str(rule.get("id") or "").strip().lower().replace(" ", "_")
+        name = str(rule.get("name") or "").strip() or rid
+        icon = str(rule.get("icon") or "mdi:swap-horizontal")
+        mode = str(rule.get("mode") or "entity_state").strip().lower()
+        entities = [str(v).strip() for v in rule.get("entities", []) if str(v).strip()]
+        template = str(rule.get("template") or "").strip()
+        if not rid:
+            continue
+        if mode not in {"entity_state", "template"}:
+            mode = "entity_state"
+        global_bypass_rules.append(
+            {
+                "id": rid,
+                "name": name,
+                "icon": icon,
+                "mode": mode,
+                "entities": entities,
+                "template": template,
+            }
+        )
+    data[CONF_GLOBAL_BYPASS_RULES] = global_bypass_rules
+
     sensor_rules = []
     for rule in data.get(CONF_SENSOR_RULES, []) or []:
         if not isinstance(rule, dict):
@@ -180,6 +208,11 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                 "entity_id": entity_id,
                 "modes": [str(v).strip().lower() for v in rule.get("modes", []) if str(v).strip()],
                 "bypass_modes": [str(v).strip().lower() for v in rule.get("bypass_modes", []) if str(v).strip()],
+                CONF_SENSOR_BYPASS_GLOBAL_IDS: [
+                    str(v).strip().lower().replace(" ", "_")
+                    for v in rule.get(CONF_SENSOR_BYPASS_GLOBAL_IDS, [])
+                    if str(v).strip()
+                ],
                 "allow_open_arm": bool(rule.get("allow_open_arm", False)),
                 "trigger_on_close_only": bool(rule.get("trigger_on_close_only", False)),
                 CONF_SENSOR_TRIGGER_ON_OPEN_ONLY: bool(
