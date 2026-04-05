@@ -30,6 +30,8 @@ from .const import (
     CONF_MODE_TIMEOUT_ACTION,
     CONF_MODES,
     CONF_REQUIRE_CODE_TO_ARM,
+    CONF_REQUIRE_CODE_TO_DISARM,
+    CONF_REQUIRE_CODE_TO_MODE_CHANGE,
     CONF_SENSOR_BYPASS_GLOBAL_IDS,
     CONF_SENSOR_RULES,
     CONF_SENSOR_TRIGGER_ON_OPEN_ONLY,
@@ -85,6 +87,12 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     data["name"] = str(data.get("name") or DEFAULTS["name"])
     data["bypass_state"] = str(data.get("bypass_state") or DEFAULTS["bypass_state"])
     data[CONF_REQUIRE_CODE_TO_ARM] = bool(data.get(CONF_REQUIRE_CODE_TO_ARM, True))
+    data[CONF_REQUIRE_CODE_TO_MODE_CHANGE] = bool(
+        data.get(CONF_REQUIRE_CODE_TO_MODE_CHANGE, True)
+    )
+    data[CONF_REQUIRE_CODE_TO_DISARM] = bool(
+        data.get(CONF_REQUIRE_CODE_TO_DISARM, True)
+    )
     mode = str(data.get(CONF_CODE_INPUT_MODE, "pin") or "pin").strip().lower()
     data[CONF_CODE_INPUT_MODE] = mode if mode in {"pin", "password"} else "pin"
     data[CONF_EXPOSE_EVENT_LOG_SENSOR] = bool(data.get(CONF_EXPOSE_EVENT_LOG_SENSOR, False))

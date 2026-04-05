@@ -33,12 +33,6 @@ class HAPanelNGAlarm extends HTMLElement {
     this.shadowRoot.querySelectorAll("ha-form, ha-selector").forEach((el) => {
       el.hass = hass;
     });
-    const g = this.shadowRoot.getElementById("form-general");
-    if (g) {
-      g.hass = hass;
-      g.data = this._data;
-    }
-
     const subtitle = this.shadowRoot.getElementById("subtitle");
     if (subtitle) subtitle.textContent = this._t("Configuration without legacy master codes", "Konfiguration ohne Legacy-Master-Codes");
     const ge = this.shadowRoot.getElementById("general-empty");
@@ -135,7 +129,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
         <div id="general" class="section">
           <ha-card header="General Settings">
-            <ha-form id="form-general"></ha-form>
+            <div id="general-settings-list" class="list"></div>
           </ha-card>
         </div>
 
@@ -347,6 +341,37 @@ class HAPanelNGAlarm extends HTMLElement {
     return opts;
   }
 
+  _renderGeneral() {
+    const host = this.shadowRoot.getElementById("general-settings-list");
+    if (!host) return;
+    host.innerHTML = "";
+
+    const upd = (patch) => {
+      this._data = { ...this._data, ...patch };
+    };
+
+    host.append(
+      this._sel({ text: {} }, this._data.name || "NG Alarm", (v) => upd({ name: v || "NG Alarm" }), "Alarm name"),
+      this._sel(
+        {
+          select: {
+            mode: "dropdown",
+            options: [
+              { value: "pin", label: "PIN keypad" },
+              { value: "password", label: "Password input" },
+            ],
+          },
+        },
+        this._data.code_input_mode || "pin",
+        (v) => upd({ code_input_mode: v || "pin" }),
+        "Code input mode"
+      ),
+      this._sel({ boolean: {} }, !!this._data.require_code_to_arm, (v) => upd({ require_code_to_arm: !!v }), "Code required for arming"),
+      this._sel({ boolean: {} }, !!this._data.require_code_to_mode_change, (v) => upd({ require_code_to_mode_change: !!v }), "Code required for mode change"),
+      this._sel({ boolean: {} }, !!this._data.require_code_to_disarm, (v) => upd({ require_code_to_disarm: !!v }), "Code required for disarming"),
+    );
+  }
+
   _renderModes() {
     const host = this.shadowRoot.getElementById("modes-list");
     if (!host) return;
@@ -436,7 +461,6 @@ class HAPanelNGAlarm extends HTMLElement {
         const sub = document.createElement("div");
         sub.className = "row";
         sub.append(
-          this._sel({ boolean: {} }, !!cur.require_code_to_arm, (v) => setCur({ require_code_to_arm: !!v }), `${typeLabel[t]}: code required for arming`),
           this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.exit_delay ?? mode.exit_delay ?? 60, (v) => setCur({ exit_delay: Number(v || 0) }), `${typeLabel[t]} exit delay`),
           this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.entry_delay ?? mode.entry_delay ?? 30, (v) => setCur({ entry_delay: Number(v || 0) }), `${typeLabel[t]} pending delay`),
           this._sel({ number: { min: 0, max: 3600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.alarm_duration ?? mode.alarm_duration ?? 0, (v) => setCur({ alarm_duration: Number(v || 0) }), `${typeLabel[t]} alarm duration (0 = infinite)`),
@@ -728,6 +752,9 @@ class HAPanelNGAlarm extends HTMLElement {
       this._data = {
         name: "NG Alarm",
         require_code_to_arm: true,
+        require_code_to_mode_change: true,
+        require_code_to_disarm: true,
+        code_input_mode: "pin",
         expose_event_log_sensor: false,
         modes: [],
         global_bypass_rules: [],
@@ -737,6 +764,7 @@ class HAPanelNGAlarm extends HTMLElement {
         ...data,
       };
 
+      this._renderGeneral();
       this._renderModes();
       this._renderGlobalBypass();
       this._renderSensors();

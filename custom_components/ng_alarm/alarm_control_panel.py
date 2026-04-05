@@ -58,6 +58,8 @@ from .const import (
     CONF_PANIC_SCRIPTS,
     CONF_PENDING_SCRIPTS,
     CONF_REQUIRE_CODE_TO_ARM,
+    CONF_REQUIRE_CODE_TO_DISARM,
+    CONF_REQUIRE_CODE_TO_MODE_CHANGE,
     CONF_SENSOR_BYPASS_GLOBAL_IDS,
     CONF_SENSOR_RULES,
     CONF_SENSOR_TRIGGER_ON_OPEN_ONLY,
@@ -397,17 +399,19 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         return action
 
     def _authorize_arm(self, code: str | None, mode_id: str) -> str | None:
-        mode_cfg = self._mode_config(mode_id)
-        require_code = bool(
-            (mode_cfg or {}).get(
-                "require_code_to_arm",
-                self._config.get(CONF_REQUIRE_CODE_TO_ARM, True),
-            )
-        )
-        arm_type = str(self._current_arm_type or "").strip().lower()
-        delays = (mode_cfg or {}).get("delays", {}) if isinstance((mode_cfg or {}).get("delays", {}), dict) else {}
-        if arm_type and arm_type in delays and isinstance(delays.get(arm_type), dict):
-            require_code = bool(delays[arm_type].get("require_code_to_arm", require_code))
+        is_mode_change = self._alarm_state in {
+            AlarmControlPanelState.ARMING,
+            AlarmControlPanelState.ARMED_AWAY,
+            AlarmControlPanelState.ARMED_HOME,
+            STATE_ARMED_NIGHT,
+            STATE_ARMED_VACATION,
+            AlarmControlPanelState.PENDING,
+            AlarmControlPanelState.TRIGGERED,
+        }
+        if is_mode_change:
+            require_code = bool(self._config.get(CONF_REQUIRE_CODE_TO_MODE_CHANGE, True))
+        else:
+            require_code = bool(self._config.get(CONF_REQUIRE_CODE_TO_ARM, True))
 
         mode_id = _normalize_mode_id(mode_id)
         cleaned_code = _clean_code(code)
@@ -932,7 +936,15 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         code = _clean_code(code)
         panic = False
         actor = UNKNOWN
-        if self._with_users():
+        require_code = bool(self._config.get(CONF_REQUIRE_CODE_TO_DISARM, True))
+
+        if not require_code:
+            if self._with_users() and code:
+                user = self._resolve_user_from_code(code)
+                if user and bool(user.get(CONF_USER_CAN_DISARM, False)):
+                    actor = self._actor_name(user)
+            self._last_actor = actor
+        elif self._with_users():
             user = self._resolve_user_from_code(code)
             if not user:
                 await self._async_log_event("denied", "Denied disarm: unknown user code")
