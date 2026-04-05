@@ -37,6 +37,7 @@ class HAPanelNGAlarm extends HTMLElement {
     if (mb) mb.hass = hass;
     const subtitle = this.shadowRoot.getElementById("subtitle");
     if (subtitle) subtitle.textContent = this._t("Configuration without legacy master codes", "Konfiguration ohne Legacy-Master-Codes");
+    this._updateHeaderVersion();
     const ge = this.shadowRoot.getElementById("general-empty");
     if (ge) ge.textContent = this._t("(intentionally empty)", "(bewusst leer)");
     const zh = this.shadowRoot.getElementById("zones-help");
@@ -61,7 +62,7 @@ class HAPanelNGAlarm extends HTMLElement {
           display:flex;
           align-items:center;
           min-height: 56px;
-          margin: 0 -12px 10px;
+          margin: -12px -12px 10px;
           padding: 0 8px;
           background: var(--app-header-background-color, var(--card-background-color));
           border-bottom: 1px solid var(--divider-color);
@@ -71,12 +72,16 @@ class HAPanelNGAlarm extends HTMLElement {
           height: 40px;
           padding: 0;
           border-radius: 999px;
-          border: none;
-          background: transparent;
+          border: none !important;
+          background: transparent !important;
+          box-shadow: none !important;
           display: inline-flex;
           align-items: center;
           justify-content: center;
         }
+        .head-title { margin-left: 6px; font-size: 1rem; font-weight: 600; }
+        .head-spacer { flex: 1; }
+        .head-version { font-size: 0.85rem; color: var(--secondary-text-color); }
         .brand { display:flex; align-items:center; gap:10px; margin-bottom: 12px; }
         .logo { width:40px; height:40px; border-radius:10px; object-fit:cover; border:1px solid var(--divider-color); }
         h1 { margin:0; font-size: 24px; }
@@ -132,6 +137,9 @@ class HAPanelNGAlarm extends HTMLElement {
 
         .footer { display:flex; align-items:center; gap:10px; margin-top: 10px; }
         .card-subtitle { padding-left: 0; }
+        ha-card {
+          --ha-card-header-padding: 8px 0 6px 0;
+        }
 
         @media (max-width: 800px) {
           .wrap { max-width: 100%; padding: 0 10px 10px; }
@@ -145,12 +153,15 @@ class HAPanelNGAlarm extends HTMLElement {
           <button id="open-sidebar" class="btn menu-btn" type="button" title="Open sidebar" aria-label="Open sidebar">
             <ha-icon icon="mdi:menu"></ha-icon>
           </button>
+          <div class="head-title">Alarm</div>
+          <div class="head-spacer"></div>
+          <div class="head-version" id="header-version">v–</div>
         </div>
 
         <div class="brand">
           <img class="logo" src="/ng_alarm_static/alarm_icon.jpg" alt="Alarm Icon" />
           <div>
-            <h1>Alarm</h1>
+            <h1>NG Alarm</h1>
             <div class="muted" id="subtitle"></div>
           </div>
         </div>
@@ -234,6 +245,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
         <div class="footer">
           <button id="save" class="btn primary btn-save">Save & Reload</button>
+          <button id="open-entity" class="btn" type="button">Open Alarm Entity</button>
           <div class="muted" id="status"></div>
         </div>
       </div>
@@ -246,6 +258,7 @@ class HAPanelNGAlarm extends HTMLElement {
     this.shadowRoot.getElementById("open-sidebar").addEventListener("click", () => {
       this.dispatchEvent(new Event("hass-toggle-menu", { bubbles: true, composed: true }));
     });
+    this.shadowRoot.getElementById("open-entity").addEventListener("click", () => this._openAlarmEntityPage());
     this.shadowRoot.querySelectorAll(".tab").forEach((btn) => {
       btn.addEventListener("click", () => this._switchTab(btn.dataset.tab));
     });
@@ -810,11 +823,29 @@ class HAPanelNGAlarm extends HTMLElement {
       this._renderUsers();
       this._renderActions();
       this._renderEventSensorToggle();
+      this._updateHeaderVersion();
 
       this._status("Configuration loaded.");
     } catch (err) {
       this._status(`Load failed: ${err.message}`);
     }
+  }
+
+  _updateHeaderVersion() {
+    const el = this.shadowRoot.getElementById("header-version");
+    if (!el) return;
+    const u = this._hass?.states?.["update.ng_alarm_update"];
+    const v = u?.attributes?.installed_version || u?.attributes?.latest_version || this._data?.version || "-";
+    el.textContent = String(v).startsWith("v") ? String(v) : `v${v}`;
+  }
+
+  _openAlarmEntityPage() {
+    const states = this._hass?.states || {};
+    let entityId = Object.keys(states).find((eid) => eid.startsWith("alarm_control_panel.ng_alarm"));
+    if (!entityId) entityId = "alarm_control_panel.ng_alarm_default";
+    const path = `/config/entities/entity/${entityId}`;
+    window.history.pushState(null, "", path);
+    window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
   }
 
   _renderEventSensorToggle() {

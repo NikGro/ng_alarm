@@ -340,7 +340,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     @property
     def code_arm_required(self) -> bool:
-        # Keep code field optional in UI; backend enforces per-zone/per-arm-type requirement.
+        # Request code input in the HA alarm UI when any zone requires code for arming.
+        modes = self._config.get(CONF_MODES, []) or []
+        if not modes:
+            return bool(self._config.get(CONF_REQUIRE_CODE_TO_ARM, True))
+        for mode in modes:
+            if bool(mode.get("require_code_to_arm", self._config.get(CONF_REQUIRE_CODE_TO_ARM, True))):
+                return True
         return False
 
     def _resolve_mode_for_arm(self, target: str) -> str:
