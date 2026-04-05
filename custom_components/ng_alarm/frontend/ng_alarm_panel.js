@@ -399,13 +399,25 @@ class HAPanelNGAlarm extends HTMLElement {
             delays[t] = { ...cur, ...patch };
             upd({ delays: delays });
           };
-          row.append(
+
+          const d = document.createElement("details");
+          d.className = "item";
+          d.open = false;
+          const s = document.createElement("summary");
+          s.textContent = `${typeLabel[t]} configuration`;
+          d.appendChild(s);
+
+          const sub = document.createElement("div");
+          sub.className = "row";
+          sub.append(
             this._sel({ boolean: {} }, !!cur.require_code_to_arm, (v) => setCur({ require_code_to_arm: !!v }), `${typeLabel[t]}: code required for arming`),
             this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.exit_delay ?? mode.exit_delay ?? 60, (v) => setCur({ exit_delay: Number(v || 0) }), `${typeLabel[t]} exit delay`),
             this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.entry_delay ?? mode.entry_delay ?? 30, (v) => setCur({ entry_delay: Number(v || 0) }), `${typeLabel[t]} pending delay`),
             this._sel({ number: { min: 0, max: 3600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.alarm_duration ?? mode.alarm_duration ?? 0, (v) => setCur({ alarm_duration: Number(v || 0) }), `${typeLabel[t]} alarm duration (0 = infinite)`),
             this._sel({ select: { mode: "dropdown", options: [{ value: "none", label: "No timeout action" }, { value: "disarm", label: "Disarm after duration" }, { value: "rearm", label: "Re-arm after duration" }] } }, cur.timeout_action || mode.timeout_action || "none", (v) => setCur({ timeout_action: v || "none" }), `${typeLabel[t]} after duration`),
           );
+          d.appendChild(sub);
+          row.appendChild(d);
         }
       });
 

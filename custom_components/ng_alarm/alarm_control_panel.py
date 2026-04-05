@@ -795,13 +795,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     async def async_alarm_arm_away(self, code=None) -> None:
         code = _clean_code(code)
+        self._current_arm_type = "away"
         self._current_mode_id = self._resolve_mode_for_arm("away")
         actor = self._authorize_arm(code, self._current_mode_id)
         if actor is None:
             await self._async_log_event("denied", "Denied arm away: code/permission/mode mismatch")
             return
         self._last_actor = actor
-        self._current_arm_type = "away"
         if self._current_mode_id == UNKNOWN:
             await self._async_log_event("denied", "Denied arm away: no modes configured")
             return
@@ -812,13 +812,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     async def async_alarm_arm_home(self, code=None) -> None:
         code = _clean_code(code)
+        self._current_arm_type = "home"
         self._current_mode_id = self._resolve_mode_for_arm("home")
         actor = self._authorize_arm(code, self._current_mode_id)
         if actor is None:
             await self._async_log_event("denied", "Denied arm home: code/permission/mode mismatch")
             return
         self._last_actor = actor
-        self._current_arm_type = "home"
         if self._current_mode_id == UNKNOWN:
             await self._async_log_event("denied", "Denied arm home: no modes configured")
             return
@@ -829,13 +829,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     async def async_alarm_arm_night(self, code=None) -> None:
         code = _clean_code(code)
+        self._current_arm_type = "night"
         self._current_mode_id = self._resolve_mode_for_arm("night")
         actor = self._authorize_arm(code, self._current_mode_id)
         if actor is None:
             await self._async_log_event("denied", "Denied arm night: code/permission/mode mismatch")
             return
         self._last_actor = actor
-        self._current_arm_type = "night"
         if self._current_mode_id == UNKNOWN:
             await self._async_log_event("denied", "Denied arm night: no modes configured")
             return
@@ -846,13 +846,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     async def async_alarm_arm_vacation(self, code=None) -> None:
         code = _clean_code(code)
+        self._current_arm_type = "vacation"
         self._current_mode_id = self._resolve_mode_for_arm("vacation")
         actor = self._authorize_arm(code, self._current_mode_id)
         if actor is None:
             await self._async_log_event("denied", "Denied arm vacation: code/permission/mode mismatch")
             return
         self._last_actor = actor
-        self._current_arm_type = "vacation"
         if self._current_mode_id == UNKNOWN:
             await self._async_log_event("denied", "Denied arm vacation: no modes configured")
             return
