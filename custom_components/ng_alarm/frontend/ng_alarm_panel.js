@@ -306,7 +306,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("users-add").addEventListener("click", () => {
       const users = [...(this._data.users || [])];
-      users.push({ name: "", code: "", code_confirm: "", can_arm: true, can_disarm: true, can_panic: false, arm_modes: [], disarm_modes: [] });
+      users.push({ name: "", code: "", can_arm: true, can_disarm: true, can_panic: false, arm_modes: [], disarm_modes: [] });
       this._data.users = users;
       this._renderUsers();
     });
@@ -685,7 +685,6 @@ class HAPanelNGAlarm extends HTMLElement {
       row.append(
         this._sel({ text: {} }, u.name || "", (v) => upd({ name: v }), "Name"),
         this._sel({ text: { type: "password" } }, u.code || "", (v) => upd({ code: v }), "Code"),
-        this._sel({ text: { type: "password" } }, u.code_confirm || "", (v) => upd({ code_confirm: v }), "Confirm code"),
         this._sel({ boolean: {} }, !!u.can_arm, (v) => upd({ can_arm: !!v }), "Can arm"),
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.arm_modes || [], (v) => upd({ arm_modes: v || [] }), "Arm modes"),
         this._sel({ boolean: {} }, !!u.can_disarm, (v) => upd({ can_disarm: !!v }), "Can disarm"),
@@ -905,17 +904,6 @@ class HAPanelNGAlarm extends HTMLElement {
 
   async _saveConfig() {
     try {
-      // user code confirmation check
-      const users = Array.isArray(this._data.users) ? this._data.users : [];
-      for (const u of users) {
-        const c1 = String(u.code || "");
-        const c2 = String(u.code_confirm || "");
-        if (c1 !== c2) {
-          this._status(`Code confirmation mismatch for user: ${u.name || "(unnamed)"}`);
-          return;
-        }
-      }
-
       const payload = JSON.parse(JSON.stringify(this._data));
       // remove ui-only fields
       if (Array.isArray(payload.users)) {
