@@ -145,7 +145,7 @@ async def async_setup_entry(
 class NGAlarmControlPanel(AlarmControlPanelEntity):
     """NG Alarm control panel implementation."""
 
-    _attr_code_format = CodeFormat.NUMBER
+    _attr_code_format = CodeFormat.TEXT
     _attr_code_arm_required = False
 
     def __init__(self, hass: HomeAssistant, config: dict[str, Any], zone_id: str | None = None) -> None:
@@ -408,11 +408,16 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         delays = (mode_cfg or {}).get("delays", {}) if isinstance((mode_cfg or {}).get("delays", {}), dict) else {}
         if arm_type and arm_type in delays and isinstance(delays.get(arm_type), dict):
             require_code = bool(delays[arm_type].get("require_code_to_arm", require_code))
+
         mode_id = _normalize_mode_id(mode_id)
+        cleaned_code = _clean_code(code)
+
+        # Hard rule requested: if code is not required for this arm type, allow arming directly.
+        if not require_code:
+            return UNKNOWN
+
         if self._with_users():
-            if not require_code and not str(code or "").strip():
-                return UNKNOWN
-            user = self._resolve_user_from_code(code)
+            user = self._resolve_user_from_code(cleaned_code)
             if not user or not bool(user.get(CONF_USER_CAN_ARM, False)):
                 return None
             allowed_raw = [str(v).strip().lower() for v in user.get(CONF_USER_ARM_MODES, []) if str(v).strip()]
@@ -424,10 +429,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                     return None
             return self._actor_name(user)
 
-        # No legacy master code: allow arming only when code is optional.
-        if require_code:
-            return None
-        return UNKNOWN
+        # No legacy master code path.
+        return None
 
     def _actor_name(self, user: dict[str, Any] | None) -> str:
         if user:
