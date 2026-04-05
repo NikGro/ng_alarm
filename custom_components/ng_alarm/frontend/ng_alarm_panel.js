@@ -458,12 +458,17 @@ class HAPanelNGAlarm extends HTMLElement {
 
   _zoneModeOptions() {
     const opts = [];
-    const modeLabel = { away: "Away", home: "Home", night: "Night", vacation: "Vacation" };
+    const modeLabel = {
+      away: this._t("Away", "Abwesend"),
+      home: this._t("Home", "Zuhause"),
+      night: this._t("Night", "Nacht"),
+      vacation: this._t("Vacation", "Urlaub"),
+    };
     (this._data.modes || []).forEach((z) => {
       const zid = z.id || "";
       const zname = z.name || zid || "zone";
       if (!zid) return;
-      opts.push({ value: zid, label: `${zname} (all arm types)` });
+      opts.push({ value: zid, label: `${zname} (${this._t("All", "Alle")})` });
       const armTypes = Array.isArray(z.arm_types) && z.arm_types.length ? z.arm_types : [z.arm_target || "away"];
       armTypes.forEach((t) => {
         const tt = String(t || "").toLowerCase();
@@ -472,6 +477,22 @@ class HAPanelNGAlarm extends HTMLElement {
       });
     });
     return opts;
+  }
+
+  _zoneDisplayLabel(raw) {
+    const value = String(raw || "").trim();
+    if (!value || value === "main") return this._t("Main", "Haupt");
+    const [zoneId, armType] = value.split(":", 2);
+    const zone = (this._data?.modes || []).find((z) => String(z?.id || "") === zoneId);
+    const zoneName = zone?.name || zoneId;
+    if (!armType) return zoneName;
+    const map = {
+      away: this._t("Away", "Abwesend"),
+      home: this._t("Home", "Zuhause"),
+      night: this._t("Night", "Nacht"),
+      vacation: this._t("Vacation", "Urlaub"),
+    };
+    return `${zoneName} (${map[String(armType).toLowerCase()] || armType})`;
   }
 
   _renderGeneral() {
@@ -1082,7 +1103,7 @@ class HAPanelNGAlarm extends HTMLElement {
       { value: "none", label: this._t("Any Sensor", "Beliebiger Sensor") },
       ...(this._data.users || []).map((u) => ({
         value: (u.name || "").trim().toLowerCase() || "any",
-        label: u.name || "Unnamed",
+        label: `${this._t("User", "Benutzer")} (${u.name || this._t("Unnamed", "Unbenannt")})`,
       })),
     ];
 
@@ -1275,7 +1296,7 @@ class HAPanelNGAlarm extends HTMLElement {
     (this._eventZones || []).forEach((z) => {
       const o = document.createElement("option");
       o.value = z;
-      o.textContent = z;
+      o.textContent = this._zoneDisplayLabel(z);
       sel.appendChild(o);
     });
     sel.value = cur;
@@ -1306,7 +1327,8 @@ class HAPanelNGAlarm extends HTMLElement {
         const item = document.createElement("div");
         item.className = "item";
         const ts = fmt.format(new Date((ev.ts || 0) * 1000));
-        item.innerHTML = `<strong>[${ev.zone || "main"}] ${ev.event || "event"}</strong> • ${ts}<br/>${ev.message || ""}<br/><span class="muted">from=${ev.from_state || ""} to=${ev.to_state || ""} by=${ev.by || ev.actor || ""}</span>`;
+        const z = this._zoneDisplayLabel(ev.zone || "main");
+        item.innerHTML = `<strong>[${z}] ${ev.event || "event"}</strong> • ${ts}<br/>${ev.message || ""}<br/><span class="muted">from=${ev.from_state || ""} to=${ev.to_state || ""} by=${ev.by || ev.actor || ""}</span>`;
         host.appendChild(item);
       });
     } catch (err) {
