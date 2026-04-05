@@ -8,6 +8,7 @@ class HAPanelNGAlarm extends HTMLElement {
     this._events = [];
     this._eventZones = [];
     this._selectedEventZone = "all";
+    this._openZoneDetails = {};
     this._activeTab = "general";
   }
 
@@ -350,7 +351,13 @@ class HAPanelNGAlarm extends HTMLElement {
       const item = document.createElement("div");
       item.className = "item";
       const details = document.createElement("details");
-      details.open = !mode.name;
+      const zoneKey = (mode.id || `zone_${idx}`).toString();
+      details.open = Object.prototype.hasOwnProperty.call(this._openZoneDetails, zoneKey)
+        ? !!this._openZoneDetails[zoneKey]
+        : !mode.name;
+      details.addEventListener("toggle", () => {
+        this._openZoneDetails[zoneKey] = details.open;
+      });
       const summary = document.createElement("summary");
       summary.innerHTML = `<ha-icon icon="${mode.icon || "mdi:shield"}"></ha-icon> ${mode.name || mode.id || `Zone #${idx + 1}`}`;
       details.appendChild(summary);
@@ -373,12 +380,18 @@ class HAPanelNGAlarm extends HTMLElement {
         ? mode.arm_types
         : [mode.arm_target || "away"];
 
+      // Base section (ID/Name/Icon)
       row.append(
         this._sel({ text: {} }, mode.id || "", (v) => upd({ id: v }), "Zone ID"),
         this._sel({ text: {} }, mode.name || "", (v) => upd({ name: v }), "Zone name"),
         this._sel({ icon: {} }, mode.icon || "mdi:shield", (v) => upd({ icon: v }), "Zone icon"),
       );
 
+      const sepBase = document.createElement("hr");
+      sepBase.className = "sep";
+      row.appendChild(sepBase);
+
+      // Arm-type toggles (always above expandables)
       const typeLabel = { away: "Away", home: "Home", night: "Night", vacation: "Vacation" };
       const delays = { ...(mode.delays || {}) };
       ["away", "home", "night", "vacation"].forEach((t) => {
@@ -389,36 +402,43 @@ class HAPanelNGAlarm extends HTMLElement {
             if (v) set.add(t); else set.delete(t);
             const next = Array.from(set);
             upd({ arm_types: next, arm_target: next[0] || "away" });
+            this._openZoneDetails[zoneKey] = true;
             this._renderModes();
           }, `Enable ${typeLabel[t]} arm type`)
         );
+      });
 
-        if (enabled) {
-          const cur = delays[t] || {};
-          const setCur = (patch) => {
-            delays[t] = { ...cur, ...patch };
-            upd({ delays: delays });
-          };
+      const sepTypes = document.createElement("hr");
+      sepTypes.className = "sep";
+      row.appendChild(sepTypes);
 
-          const d = document.createElement("details");
-          d.className = "item";
-          d.open = false;
-          const s = document.createElement("summary");
-          s.textContent = `${typeLabel[t]} configuration`;
-          d.appendChild(s);
+      // Expandables per enabled arm type
+      ["away", "home", "night", "vacation"].forEach((t) => {
+        if (!selectedArmTypes.includes(t)) return;
+        const cur = delays[t] || {};
+        const setCur = (patch) => {
+          delays[t] = { ...cur, ...patch };
+          upd({ delays: delays });
+        };
 
-          const sub = document.createElement("div");
-          sub.className = "row";
-          sub.append(
-            this._sel({ boolean: {} }, !!cur.require_code_to_arm, (v) => setCur({ require_code_to_arm: !!v }), `${typeLabel[t]}: code required for arming`),
-            this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.exit_delay ?? mode.exit_delay ?? 60, (v) => setCur({ exit_delay: Number(v || 0) }), `${typeLabel[t]} exit delay`),
-            this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.entry_delay ?? mode.entry_delay ?? 30, (v) => setCur({ entry_delay: Number(v || 0) }), `${typeLabel[t]} pending delay`),
-            this._sel({ number: { min: 0, max: 3600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.alarm_duration ?? mode.alarm_duration ?? 0, (v) => setCur({ alarm_duration: Number(v || 0) }), `${typeLabel[t]} alarm duration (0 = infinite)`),
-            this._sel({ select: { mode: "dropdown", options: [{ value: "none", label: "No timeout action" }, { value: "disarm", label: "Disarm after duration" }, { value: "rearm", label: "Re-arm after duration" }] } }, cur.timeout_action || mode.timeout_action || "none", (v) => setCur({ timeout_action: v || "none" }), `${typeLabel[t]} after duration`),
-          );
-          d.appendChild(sub);
-          row.appendChild(d);
-        }
+        const d = document.createElement("details");
+        d.className = "item";
+        d.open = false;
+        const s = document.createElement("summary");
+        s.textContent = `${typeLabel[t]} configuration`;
+        d.appendChild(s);
+
+        const sub = document.createElement("div");
+        sub.className = "row";
+        sub.append(
+          this._sel({ boolean: {} }, !!cur.require_code_to_arm, (v) => setCur({ require_code_to_arm: !!v }), `${typeLabel[t]}: code required for arming`),
+          this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.exit_delay ?? mode.exit_delay ?? 60, (v) => setCur({ exit_delay: Number(v || 0) }), `${typeLabel[t]} exit delay`),
+          this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.entry_delay ?? mode.entry_delay ?? 30, (v) => setCur({ entry_delay: Number(v || 0) }), `${typeLabel[t]} pending delay`),
+          this._sel({ number: { min: 0, max: 3600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.alarm_duration ?? mode.alarm_duration ?? 0, (v) => setCur({ alarm_duration: Number(v || 0) }), `${typeLabel[t]} alarm duration (0 = infinite)`),
+          this._sel({ select: { mode: "dropdown", options: [{ value: "none", label: "No timeout action" }, { value: "disarm", label: "Disarm after duration" }, { value: "rearm", label: "Re-arm after duration" }] } }, cur.timeout_action || mode.timeout_action || "none", (v) => setCur({ timeout_action: v || "none" }), `${typeLabel[t]} after duration`),
+        );
+        d.appendChild(sub);
+        row.appendChild(d);
       });
 
       const del = document.createElement("button");

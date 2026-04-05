@@ -139,7 +139,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
     """NG Alarm control panel implementation."""
 
     _attr_code_format = CodeFormat.NUMBER
-    _attr_code_arm_required = False
+    _attr_code_arm_required = True
 
     def __init__(self, hass: HomeAssistant, config: dict[str, Any], zone_id: str | None = None) -> None:
         self.hass = hass
@@ -331,7 +331,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     @property
     def code_arm_required(self) -> bool:
-        return False
+        # Keep keypad visible/consistent; backend enforces per-zone/per-arm-type requirement.
+        return True
 
     def _resolve_mode_for_arm(self, target: str) -> str:
         target = str(target).strip().lower()
