@@ -11,6 +11,9 @@ class HAPanelNGAlarm extends HTMLElement {
     this._openZoneDetails = {};
     this._openGlobalBypassDetails = {};
     this._sensorConfigClipboard = null;
+    this._autosaveTimer = null;
+    this._autosaveInFlight = false;
+    this._configLoaded = false;
     this._activeTab = "general";
   }
 
@@ -70,12 +73,8 @@ class HAPanelNGAlarm extends HTMLElement {
           display:flex;
           align-items:center;
           min-height: 56px;
-          margin: 0 0 10px;
+          margin: 0 -12px 10px;
           padding: 0 12px;
-          width: 100vw;
-          position: relative;
-          left: 50%;
-          transform: translateX(-50%);
           box-sizing: border-box;
           background: var(--app-header-background-color, var(--card-background-color));
           border-bottom: 1px solid var(--divider-color);
@@ -134,7 +133,10 @@ class HAPanelNGAlarm extends HTMLElement {
           padding:10px;
           background: var(--secondary-background-color, var(--card-background-color));
         }
+        .item.drag-over-before { margin-top: 14px; }
+        .item.drag-over-after { margin-bottom: 14px; }
         details > summary { cursor:pointer; font-weight:600; }
+        details > summary::-webkit-details-marker { margin-right: 6px; }
         .row { display:grid; grid-template-columns: 1fr; gap:8px; margin-top:8px; }
 
         .btn {
@@ -167,11 +169,12 @@ class HAPanelNGAlarm extends HTMLElement {
         .inline-test-result.err { color: #b00020; font-weight: 600; }
         .hint-inline { font-size: 0.82rem; color: var(--secondary-text-color); margin-top: -4px; }
         .summary-with-handle {
-          display:flex;
+          display:inline-flex;
           align-items:center;
           justify-content:space-between;
           gap: 10px;
-          width: 100%;
+          width: calc(100% - 18px);
+          vertical-align: middle;
         }
         .summary-main {
           display:inline-flex;
@@ -193,6 +196,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
         @media (max-width: 800px) {
           .wrap { max-width: 100%; padding: 0 10px 10px; }
+          .head-native { margin: 0 -10px 10px; }
           .tabs { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; justify-content: stretch; }
           .tab { flex: 1 1 auto; }
           .btn-save { min-width: 156px; }
@@ -309,6 +313,7 @@ class HAPanelNGAlarm extends HTMLElement {
       modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", arm_types: ["away"], require_code_to_arm: true, require_code_to_mode_change: true, require_code_to_disarm: true, exit_delay: 60, entry_delay: 30, bypass_mode: "none", bypass_entities: [], bypass_template: "" });
       this._data.modes = modes;
       this._renderModes();
+      this._scheduleAutosave();
     });
 
     this.shadowRoot.getElementById("global-bypass-add").addEventListener("click", () => {
@@ -317,6 +322,7 @@ class HAPanelNGAlarm extends HTMLElement {
       this._data.global_bypass_rules = rules;
       this._renderGlobalBypass();
       this._renderSensors();
+      this._scheduleAutosave();
     });
 
     this.shadowRoot.getElementById("sensors-add").addEventListener("click", () => {
@@ -324,6 +330,7 @@ class HAPanelNGAlarm extends HTMLElement {
       rules.push({ entity_id: "", modes: [], bypass_modes: [], bypass_global_ids: [], allow_open_arm: false, trigger_on_open_only: false, trigger_unknown_unavailable: false });
       this._data.sensor_rules = rules;
       this._renderSensors();
+      this._scheduleAutosave();
     });
 
     this.shadowRoot.getElementById("sensors-add-all-motion").addEventListener("click", () => {
@@ -340,6 +347,7 @@ class HAPanelNGAlarm extends HTMLElement {
       });
       this._data.sensor_rules = [...(this._data.sensor_rules || []), ...add];
       this._renderSensors();
+      this._scheduleAutosave();
     });
 
     this.shadowRoot.getElementById("sensors-add-all-door").addEventListener("click", () => {
@@ -356,6 +364,7 @@ class HAPanelNGAlarm extends HTMLElement {
       });
       this._data.sensor_rules = [...(this._data.sensor_rules || []), ...add];
       this._renderSensors();
+      this._scheduleAutosave();
     });
 
     this.shadowRoot.getElementById("users-add").addEventListener("click", () => {
@@ -363,6 +372,7 @@ class HAPanelNGAlarm extends HTMLElement {
       users.push({ name: "", code: "", can_arm: true, can_disarm: true, can_panic: false, arm_modes: [], disarm_modes: [] });
       this._data.users = users;
       this._renderUsers();
+      this._scheduleAutosave();
     });
 
     this.shadowRoot.getElementById("actions-add").addEventListener("click", () => {
@@ -370,6 +380,7 @@ class HAPanelNGAlarm extends HTMLElement {
       actions.push({ name: "", icon: "mdi:script-text-outline", from: ["any"], to: ["any"], through: ["any"], through_mode: ["any"], by_user: "any", targets: [] });
       this._data.actions = actions;
       this._renderActions();
+      this._scheduleAutosave();
     });
 
     this.shadowRoot.getElementById("events-zone").addEventListener("change", (ev) => {
@@ -403,9 +414,18 @@ class HAPanelNGAlarm extends HTMLElement {
     sel.addEventListener("value-changed", (ev) => {
       sel.value = ev.detail.value;
       onChange(ev.detail.value);
+      this._scheduleAutosave();
     });
     wrap.appendChild(sel);
     return wrap;
+  }
+
+  _scheduleAutosave() {
+    if (!this._configLoaded) return;
+    if (this._autosaveTimer) clearTimeout(this._autosaveTimer);
+    this._autosaveTimer = setTimeout(() => {
+      this._saveConfig(true);
+    }, 1200);
   }
 
   _modeOptions() {
@@ -572,6 +592,7 @@ class HAPanelNGAlarm extends HTMLElement {
         this._renderModes();
         this._renderSensors();
         this._renderActions();
+        this._scheduleAutosave();
       });
 
       details.appendChild(row);
@@ -669,6 +690,7 @@ class HAPanelNGAlarm extends HTMLElement {
         this._data.global_bypass_rules = arr;
         this._renderGlobalBypass();
         this._renderSensors();
+        this._scheduleAutosave();
       });
 
       const btnRow = document.createElement("div");
@@ -722,21 +744,42 @@ class HAPanelNGAlarm extends HTMLElement {
       item.addEventListener("dragstart", (ev) => {
         ev.dataTransfer.effectAllowed = "move";
         ev.dataTransfer.setData("text/plain", String(idx));
+        item.classList.add("dragging");
+      });
+      item.addEventListener("dragend", () => {
+        item.classList.remove("dragging");
+        host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
       });
       item.addEventListener("dragover", (ev) => {
         ev.preventDefault();
         ev.dataTransfer.dropEffect = "move";
+        const rect = item.getBoundingClientRect();
+        const before = ev.clientY < rect.top + rect.height / 2;
+        host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
+        item.classList.add(before ? "drag-over-before" : "drag-over-after");
+      });
+      item.addEventListener("dragleave", () => {
+        item.classList.remove("drag-over-before", "drag-over-after");
       });
       item.addEventListener("drop", (ev) => {
         ev.preventDefault();
         const from = Number(ev.dataTransfer.getData("text/plain"));
         const to = Number(item.dataset.index);
         if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
+        const rect = item.getBoundingClientRect();
+        const before = ev.clientY < rect.top + rect.height / 2;
         const rules = [...(this._data.sensor_rules || [])];
         const [moved] = rules.splice(from, 1);
-        rules.splice(to, 0, moved);
+        let insertAt = to;
+        if (!before) insertAt = to + (from < to ? 0 : 1);
+        else insertAt = to + (from < to ? -1 : 0);
+        if (insertAt < 0) insertAt = 0;
+        if (insertAt > rules.length) insertAt = rules.length;
+        rules.splice(insertAt, 0, moved);
         this._data.sensor_rules = rules;
+        host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
         this._renderSensors();
+        this._scheduleAutosave();
       });
 
       const details = document.createElement("details");
@@ -836,6 +879,7 @@ class HAPanelNGAlarm extends HTMLElement {
         rules.splice(idx, 1);
         this._data.sensor_rules = rules;
         this._renderSensors();
+        this._scheduleAutosave();
       });
 
       const copyBtn = document.createElement("button");
@@ -865,6 +909,7 @@ class HAPanelNGAlarm extends HTMLElement {
         }
         upd({ ...this._sensorConfigClipboard });
         this._status("Sensor config pasted.", "ok");
+        this._scheduleAutosave();
       });
 
       const btnRow = document.createElement("div");
@@ -934,6 +979,7 @@ class HAPanelNGAlarm extends HTMLElement {
         this._data.users = users;
         this._renderUsers();
         this._renderActions();
+        this._scheduleAutosave();
       });
 
       details.appendChild(row);
@@ -1018,6 +1064,7 @@ class HAPanelNGAlarm extends HTMLElement {
         actions.splice(idx, 1);
         this._data.actions = actions;
         this._renderActions();
+        this._scheduleAutosave();
       });
 
       details.appendChild(row);
@@ -1053,9 +1100,11 @@ class HAPanelNGAlarm extends HTMLElement {
       this._renderActions();
       this._renderEventSensorToggle();
       this._updateHeaderVersion();
+      this._configLoaded = true;
 
       this._status("Configuration loaded.");
     } catch (err) {
+      this._configLoaded = false;
       this._status(`Load failed: ${err.message}`, "error");
     }
   }
@@ -1153,8 +1202,10 @@ class HAPanelNGAlarm extends HTMLElement {
     }
   }
 
-  async _saveConfig() {
+  async _saveConfig(isAutosave = false) {
+    if (this._autosaveInFlight) return;
     try {
+      this._autosaveInFlight = true;
       const payload = JSON.parse(JSON.stringify(this._data));
       // remove ui-only fields
       if (Array.isArray(payload.users)) {
@@ -1169,9 +1220,11 @@ class HAPanelNGAlarm extends HTMLElement {
       delete payload.panic_code;
 
       await this._hass.callApi("post", "ng_alarm/config", payload);
-      this._status("Saved and runtime reloaded.", "ok");
+      this._status(isAutosave ? "Autosaved." : "Saved and runtime reloaded.", "ok");
     } catch (err) {
       this._status(`Save failed: ${err.message}`, "error");
+    } finally {
+      this._autosaveInFlight = false;
     }
   }
 

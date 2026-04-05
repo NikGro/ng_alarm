@@ -13,12 +13,14 @@ from homeassistant.components.frontend import (
     async_register_built_in_panel,
 )
 from homeassistant.components.http import HomeAssistantView
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
     API_EVENTS,
     API_EVENTS_CLEAR,
     API_GET_CONFIG,
     API_RELOAD,
+    CONF_MODES,
     DOMAIN,
     PANEL_COMPONENT_NAME,
     PANEL_JS_FILE,
@@ -53,12 +55,30 @@ class NGAlarmConfigView(HomeAssistantView):
         normalized = await save_config(runtime.store, payload)
         runtime.config = normalized
 
+        # Remove orphaned zone entities from entity registry when zones were deleted.
+        entries = hass.config_entries.async_entries(DOMAIN)
+        if entries:
+            entry_id = entries[0].entry_id
+            registry = er.async_get(hass)
+            zone_ids = {
+                str((z or {}).get("id", "")).strip().lower().replace(" ", "_")
+                for z in normalized.get(CONF_MODES, [])
+                if isinstance(z, dict) and str((z or {}).get("id", "")).strip()
+            }
+            keep_unique_ids = {f"{DOMAIN}_{zid}" for zid in zone_ids} or {f"{DOMAIN}_main"}
+            for entry in er.async_entries_for_config_entry(registry, entry_id):
+                if entry.domain != "alarm_control_panel":
+                    continue
+                if not (entry.unique_id or "").startswith(f"{DOMAIN}_"):
+                    continue
+                if entry.unique_id not in keep_unique_ids:
+                    registry.async_remove(entry.entity_id)
+
         for entity in (runtime.entities or ([runtime.entity] if runtime.entity else [])):
             if entity:
                 await entity.async_reload_config(normalized)
 
         try:
-            entries = hass.config_entries.async_entries(DOMAIN)
             if entries:
                 await hass.services.async_call(
                     "homeassistant",
