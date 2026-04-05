@@ -92,6 +92,5 @@ class NGAlarmEventLogSensor(SensorEntity):
             "from_state": from_state,
             "to_state": to_state,
             "by": by_actor,
-            "is_panic": bool(last.get("is_panic", False)),
             "summary_text": f"[{zone}] {from_state} -> {to_state} by {by_actor}",
         }

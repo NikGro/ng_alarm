@@ -42,7 +42,6 @@ from .const import (
     CONF_USER_CAN_ARM,
     CONF_USER_CAN_ARM_OVERRIDE,
     CONF_USER_CAN_DISARM,
-    CONF_USER_CAN_PANIC,
     CONF_USER_ARM_MODES,
     CONF_USER_DISARM_MODES,
     CONF_USER_CODE,
@@ -307,7 +306,6 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                 CONF_USER_CAN_ARM: bool(user.get(CONF_USER_CAN_ARM, True)),
                 CONF_USER_CAN_ARM_OVERRIDE: bool(user.get(CONF_USER_CAN_ARM_OVERRIDE, False)),
                 CONF_USER_CAN_DISARM: bool(user.get(CONF_USER_CAN_DISARM, True)),
-                CONF_USER_CAN_PANIC: bool(user.get(CONF_USER_CAN_PANIC, False)),
                 CONF_USER_ARM_MODES: arm_modes,
                 CONF_USER_DISARM_MODES: disarm_modes,
             }

@@ -386,7 +386,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("users-add").addEventListener("click", () => {
       const users = [...(this._data.users || [])];
-      users.push({ name: "", code: "", can_arm: true, can_arm_override: false, can_disarm: true, can_panic: false, arm_modes: [], disarm_modes: [] });
+      users.push({ name: "", code: "", can_arm: true, can_arm_override: false, can_disarm: true, arm_modes: [], disarm_modes: [] });
       this._data.users = users;
       this._renderUsers();
       this._scheduleAutosave();
@@ -1008,7 +1008,7 @@ class HAPanelNGAlarm extends HTMLElement {
       const details = document.createElement("details");
       details.open = !u.name;
       const summary = document.createElement("summary");
-      const userIcon = u.can_panic ? "mdi:account-alert" : "mdi:account";
+      const userIcon = "mdi:account";
       summary.innerHTML = `<ha-icon icon="${userIcon}"></ha-icon> ${u.name || `User #${idx + 1}`}`;
       details.appendChild(summary);
 
@@ -1019,7 +1019,7 @@ class HAPanelNGAlarm extends HTMLElement {
         users[idx] = { ...users[idx], ...patch };
         this._data.users = users;
         const iu = users[idx];
-        const userIconNow = iu.can_panic ? "mdi:account-alert" : "mdi:account";
+        const userIconNow = "mdi:account";
         summary.innerHTML = `<ha-icon icon="${userIconNow}"></ha-icon> ${iu.name || `User #${idx + 1}`}`;
       };
 
@@ -1032,7 +1032,6 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.arm_modes || [], (v) => upd({ arm_modes: v || [] }), "Arm modes"),
         this._sel({ boolean: {} }, !!u.can_disarm, (v) => upd({ can_disarm: !!v }), "Can disarm"),
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.disarm_modes || [], (v) => upd({ disarm_modes: v || [] }), "Disarm modes"),
-        this._sel({ boolean: {} }, !!u.can_panic, (v) => upd({ can_panic: !!v }), "Is panic code"),
       );
 
       const del = document.createElement("button");

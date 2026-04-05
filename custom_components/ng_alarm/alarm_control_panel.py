@@ -57,7 +57,6 @@ from .const import (
     CONF_IGNORE_UNKNOWN_STATES,
     CONF_MODES,
     CONF_NAME,
-    CONF_PANIC_SCRIPTS,
     CONF_PENDING_SCRIPTS,
     CONF_REQUIRE_CODE_TO_ARM,
     CONF_REQUIRE_CODE_TO_DISARM,
@@ -71,7 +70,6 @@ from .const import (
     CONF_USER_CAN_ARM,
     CONF_USER_CAN_ARM_OVERRIDE,
     CONF_USER_CAN_DISARM,
-    CONF_USER_CAN_PANIC,
     CONF_USER_ARM_MODES,
     CONF_USER_DISARM_MODES,
     CONF_USER_CODE,
@@ -326,7 +324,6 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             "from_state": meta.get("from_state", UNKNOWN),
             "to_state": meta.get("to_state", _state_str(self._alarm_state)),
             "by": meta.get("by", self._last_actor),
-            "is_panic": bool(meta.get("is_panic", False)),
         }
         entry.update({k: v for k, v in meta.items() if v is not None})
         self._event_log.append(entry)
@@ -981,7 +978,6 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     async def async_alarm_disarm(self, code=None) -> None:
         code = _clean_code(code)
-        panic = False
         actor = UNKNOWN
         mode_cfg = self._mode_config(self._current_mode_id) or {}
         require_code = bool(
@@ -1014,9 +1010,6 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 if self._current_mode_id not in allowed_zone and current_pair not in allowed_pairs:
                     await self._async_log_event("denied", "Denied disarm: mode not allowed for user")
                     return
-            panic = bool(user.get(CONF_USER_CAN_PANIC, False)) and bool(
-                str(code or "").strip()
-            )
         else:
             await self._async_log_event("denied", "Denied disarm: no users configured")
             return
@@ -1037,19 +1030,14 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self.async_write_ha_state()
         await self._async_persist_runtime()
         await self._async_log_event(
-            "panic" if panic else "disarmed",
+            "disarmed",
             "Alarm disarmed",
-            from_state="triggered" if panic else prev,
+            from_state=prev,
             to_state="disarmed",
             by=self._last_actor,
-            is_panic=panic,
         )
-        await self._async_run_transition_actions(prev, "disarmed", "panic" if panic else "disarmed")
-
-        if panic:
-            await self._async_run_scripts(CONF_PANIC_SCRIPTS, "panic")
-        else:
-            await self._async_run_scripts(CONF_DISARMED_SCRIPTS, "disarmed")
+        await self._async_run_transition_actions(prev, "disarmed", "disarmed")
+        await self._async_run_scripts(CONF_DISARMED_SCRIPTS, "disarmed")
 
     def _schedule_alarm_timeout(self) -> None:
         duration = self._mode_delay(CONF_MODE_ALARM_DURATION, 0)
@@ -1101,8 +1089,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         actor = UNKNOWN
         if self._with_users():
             user = self._resolve_user_from_code(code)
-            if not user or not bool(user.get(CONF_USER_CAN_PANIC, False)):
-                await self._async_log_event("denied", "Denied trigger: missing panic permission")
+            if not user:
+                await self._async_log_event("denied", "Denied trigger: unknown user code")
                 return
             actor = self._actor_name(user)
         else:
