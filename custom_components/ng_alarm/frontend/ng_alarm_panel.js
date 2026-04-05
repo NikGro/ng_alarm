@@ -6,6 +6,8 @@ class HAPanelNGAlarm extends HTMLElement {
     this._hass = null;
     this._data = {};
     this._events = [];
+    this._eventZones = [];
+    this._selectedEventZone = "all";
     this._activeTab = "general";
   }
 
@@ -164,7 +166,11 @@ class HAPanelNGAlarm extends HTMLElement {
 
         <div id="events" class="section">
           <ha-card header="Event Log">
-            <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+              <label class="muted" for="events-zone" style="margin-right:4px">Zone</label>
+              <select id="events-zone" class="btn" style="min-width:140px">
+                <option value="all">All zones</option>
+              </select>
               <button id="events-refresh" class="btn" type="button">Refresh</button>
               <button id="events-export" class="btn" type="button">Export JSON</button>
               <button id="events-clear" class="btn danger" type="button">Clear</button>
@@ -220,6 +226,10 @@ class HAPanelNGAlarm extends HTMLElement {
       this._renderActions();
     });
 
+    this.shadowRoot.getElementById("events-zone").addEventListener("change", (ev) => {
+      this._selectedEventZone = ev.target.value || "all";
+      this._loadEvents();
+    });
     this.shadowRoot.getElementById("events-refresh").addEventListener("click", () => this._loadEvents());
     this.shadowRoot.getElementById("events-export").addEventListener("click", () => this._exportEvents());
     this.shadowRoot.getElementById("events-clear").addEventListener("click", () => this._clearEvents());
@@ -570,10 +580,27 @@ class HAPanelNGAlarm extends HTMLElement {
     URL.revokeObjectURL(url);
   }
 
+  _renderEventZoneOptions() {
+    const sel = this.shadowRoot.getElementById("events-zone");
+    if (!sel) return;
+    const cur = this._selectedEventZone || "all";
+    sel.innerHTML = `<option value="all">All zones</option>`;
+    (this._eventZones || []).forEach((z) => {
+      const o = document.createElement("option");
+      o.value = z;
+      o.textContent = z;
+      sel.appendChild(o);
+    });
+    sel.value = cur;
+  }
+
   async _loadEvents() {
     try {
-      const payload = await this._hass.callApi("get", "ng_alarm/events");
+      const zone = encodeURIComponent(this._selectedEventZone || "all");
+      const payload = await this._hass.callApi("get", `ng_alarm/events?zone=${zone}`);
       this._events = payload.events || [];
+      this._eventZones = payload.zones || [];
+      this._renderEventZoneOptions();
       const host = this.shadowRoot.getElementById("events-list");
       host.innerHTML = "";
       if (!this._events.length) {
@@ -584,7 +611,7 @@ class HAPanelNGAlarm extends HTMLElement {
         const item = document.createElement("div");
         item.className = "item";
         const ts = new Date((ev.ts || 0) * 1000).toLocaleString();
-        item.innerHTML = `<strong>${ev.event || "event"}</strong> • ${ts}<br/>${ev.message || ""}<br/><span class="muted">state=${ev.state || ""} mode=${ev.mode || ""} actor=${ev.actor || ""}</span>`;
+        item.innerHTML = `<strong>[${ev.zone || "main"}] ${ev.event || "event"}</strong> • ${ts}<br/>${ev.message || ""}<br/><span class="muted">from=${ev.from_state || ""} to=${ev.to_state || ""} by=${ev.by || ev.actor || ""}</span>`;
         host.appendChild(item);
       });
     } catch (err) {
@@ -594,7 +621,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
   async _clearEvents() {
     try {
-      await this._hass.callApi("post", "ng_alarm/events/clear", {});
+      await this._hass.callApi("post", "ng_alarm/events/clear", { zone: this._selectedEventZone || "all" });
       this._events = [];
       await this._loadEvents();
       this._status("Event log cleared.");

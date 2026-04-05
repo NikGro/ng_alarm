@@ -103,12 +103,31 @@ class NGAlarmEventsView(HomeAssistantView):
         hass = request.app["hass"]
         runtime = hass.data[DOMAIN][RUNTIME_STATE_KEY]
         entities = runtime.entities or ([runtime.entity] if runtime.entity else [])
-        events = []
+
+        wanted_zone = str(request.query.get("zone", "all") or "all").strip().lower()
+        by_zone: dict[str, list[dict[str, Any]]] = {}
+        zones: list[str] = []
+
         for entity in entities:
-            if entity:
-                events.extend(entity.get_event_log())
+            if not entity:
+                continue
+            zone_id = getattr(entity, "_zone_id", None) or "main"
+            zones.append(zone_id)
+            if wanted_zone != "all" and zone_id != wanted_zone:
+                continue
+            z_events = list(entity.get_event_log())
+            z_events.sort(key=lambda x: x.get("ts", 0))
+            by_zone[zone_id] = z_events[-500:]
+
+        events = []
+        for z, z_events in by_zone.items():
+            for ev in z_events:
+                merged = dict(ev)
+                merged.setdefault("zone", z)
+                events.append(merged)
         events.sort(key=lambda x: x.get("ts", 0))
-        return self.json({"events": events[-500:]})
+
+        return self.json({"events": events[-500:], "events_by_zone": by_zone, "zones": sorted(set(zones))})
 
 
 class NGAlarmEventsClearView(HomeAssistantView):
@@ -121,9 +140,16 @@ class NGAlarmEventsClearView(HomeAssistantView):
     async def post(self, request):
         hass = request.app["hass"]
         runtime = hass.data[DOMAIN][RUNTIME_STATE_KEY]
+        payload = await request.json() if request.can_read_body else {}
+        wanted_zone = str(payload.get("zone", "all") or "all").strip().lower()
+
         for entity in (runtime.entities or ([runtime.entity] if runtime.entity else [])):
-            if entity:
-                await entity.async_clear_event_log()
+            if not entity:
+                continue
+            zone_id = getattr(entity, "_zone_id", None) or "main"
+            if wanted_zone != "all" and wanted_zone != zone_id:
+                continue
+            await entity.async_clear_event_log()
         return self.json({"ok": True})
 
 
