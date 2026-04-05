@@ -105,6 +105,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
         name = str(mode.get("name") or "").strip()
         icon = str(mode.get("icon") or "mdi:shield")
         arm_target = str(mode.get("arm_target") or "away").strip().lower()
+        require_code_to_arm = bool(mode.get("require_code_to_arm", True))
         bypass_mode = str(mode.get("bypass_mode") or "none").strip().lower()
         bypass_entities = [
             str(v).strip() for v in mode.get("bypass_entities", []) if str(v).strip()
@@ -113,7 +114,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
         bypass_template = str(mode.get("bypass_template") or "").strip()
         if not mode_id or not name:
             continue
-        if arm_target not in {"away", "home"}:
+        if arm_target not in {"away", "home", "night", "vacation"}:
             arm_target = "away"
         if bypass_mode not in {"none", "entity_state", "template"}:
             bypass_mode = "none"
@@ -134,6 +135,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                 "name": name,
                 "icon": icon,
                 "arm_target": arm_target,
+                "require_code_to_arm": require_code_to_arm,
                 "exit_delay": exit_delay,
                 "entry_delay": entry_delay,
                 "bypass_mode": bypass_mode,
@@ -222,6 +224,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                     for v in action.get(CONF_ACTION_THROUGH, [])
                     if str(v).strip()
                 ],
+                "name": str(action.get("name", "") or "").strip(),
                 CONF_ACTION_BY_USER: str(action.get(CONF_ACTION_BY_USER, "any") or "any").strip(),
                 CONF_ACTION_TARGETS: targets,
                 CONF_ACTION_SCRIPTS: targets,

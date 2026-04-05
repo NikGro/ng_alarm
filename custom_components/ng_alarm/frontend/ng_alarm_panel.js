@@ -73,7 +73,10 @@ class HAPanelNGAlarm extends HTMLElement {
           cursor:pointer;
         }
         .btn.primary { border:none; background: var(--primary-color); color:white; font-weight:600; }
-        .btn.danger { border-color:#b00020; color:#b00020; }
+        .btn.danger { border-color:#b00020; color:#b00020; margin-top: 10px; }
+        #modes-add, #sensors-add, #users-add, #actions-add { margin-top: 10px; }
+        #events-list .item { margin-bottom: 10px; line-height: 1.35; }
+        hr.sep { border: none; border-top: 1px dashed var(--divider-color); margin: 8px 0; grid-column: 1 / -1; }
 
         .footer { display:flex; align-items:center; gap:10px; margin-top: 10px; }
 
@@ -104,7 +107,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
         <div id="general" class="section">
           <ha-card header="General Settings">
-            <ha-form id="form-general"></ha-form>
+            <div class="muted">(intentionally empty)</div>
           </ha-card>
         </div>
 
@@ -135,6 +138,9 @@ class HAPanelNGAlarm extends HTMLElement {
           <ha-card header="Action Builder">
             <div id="actions-list" class="list"></div>
             <button id="actions-add" class="btn" type="button">+ Add action</button>
+            <div class="muted" style="margin-top:10px">
+              Script/target variables available: <code>from_state</code>, <code>to_state</code>, <code>alarm_mode</code>, <code>actor</code>, <code>triggered_sensor</code>, <code>triggered_sensor_name</code>.
+            </div>
           </ha-card>
         </div>
 
@@ -155,22 +161,6 @@ class HAPanelNGAlarm extends HTMLElement {
       </div>
     `;
 
-    this._setupGeneralForm();
-  }
-
-  _setupGeneralForm() {
-    const form = this.shadowRoot.getElementById("form-general");
-    form.hass = this._hass;
-    form.data = this._data;
-    form.schema = [
-      { name: "require_code_to_arm", selector: { boolean: {} } },
-    ];
-    form.computeLabel = (item) => ({
-      require_code_to_arm: "Code required for arming",
-    }[item.name] || item.name);
-    form.addEventListener("value-changed", (ev) => {
-      this._data = { ...this._data, ...ev.detail.value };
-    });
   }
 
   _bindEvents() {
@@ -181,7 +171,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("modes-add").addEventListener("click", () => {
       const modes = [...(this._data.modes || [])];
-      modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", exit_delay: 60, entry_delay: 30, bypass_mode: "none", bypass_entities: [], bypass_template: "" });
+      modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", require_code_to_arm: true, exit_delay: 60, entry_delay: 30, bypass_mode: "none", bypass_entities: [], bypass_template: "" });
       this._data.modes = modes;
       this._renderModes();
     });
@@ -202,7 +192,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("actions-add").addEventListener("click", () => {
       const actions = [...(this._data.actions || [])];
-      actions.push({ from: ["any"], to: ["any"], through: ["any"], by_user: "any", scripts: [] });
+      actions.push({ name: "", from: ["any"], to: ["any"], through: ["any"], by_user: "any", targets: [] });
       this._data.actions = actions;
       this._renderActions();
     });
@@ -267,7 +257,8 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ text: {} }, mode.id || "", (v) => upd({ id: v }), "Mode ID"),
         this._sel({ text: {} }, mode.name || "", (v) => upd({ name: v }), "Mode name"),
         this._sel({ icon: {} }, mode.icon || "mdi:shield", (v) => upd({ icon: v }), "Mode icon"),
-        this._sel({ select: { mode: "dropdown", options: [{ value: "away", label: "Away" }, { value: "home", label: "Home" }] } }, mode.arm_target || "away", (v) => upd({ arm_target: v }), "Arm target"),
+        this._sel({ select: { mode: "dropdown", options: [{ value: "away", label: "Away" }, { value: "home", label: "Home" }, { value: "night", label: "Night" }, { value: "vacation", label: "Vacation" }] } }, mode.arm_target || "away", (v) => upd({ arm_target: v }), "Arm type"),
+        this._sel({ boolean: {} }, !!mode.require_code_to_arm, (v) => upd({ require_code_to_arm: !!v }), "Code required for arming"),
         this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, mode.exit_delay ?? 60, (v) => upd({ exit_delay: Number(v || 0) }), "Exit delay"),
         this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, mode.entry_delay ?? 30, (v) => upd({ entry_delay: Number(v || 0) }), "Entry delay"),
         this._sel({ select: { mode: "dropdown", options: [{ value: "none", label: "No bypass" }, { value: "entity_state", label: "Entity state" }, { value: "template", label: "Template" }] } }, mode.bypass_mode || "none", (v) => { upd({ bypass_mode: v }); this._renderModes(); }, "Bypass mode"),
@@ -335,8 +326,15 @@ class HAPanelNGAlarm extends HTMLElement {
 
       row.append(
         this._sel({ entity: { filter: { domain: "binary_sensor" } } }, rule.entity_id || "", (v) => upd({ entity_id: v }), "Sensor"),
-        this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.modes || [], (v) => upd({ modes: v || [] }), "Modes"),
-        this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.bypass_modes || [], (v) => upd({ bypass_modes: v || [] }), "Bypass in modes"),
+        this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.modes || [], (v) => upd({ modes: v || [] }), "Modes used in"),
+      );
+
+      const sep = document.createElement("hr");
+      sep.className = "sep";
+      row.appendChild(sep);
+
+      row.append(
+        this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.bypass_modes || [], (v) => upd({ bypass_modes: v || [] }), "Modes bypassed when bypass is active"),
         this._sel({ boolean: {} }, !rule.allow_open_arm, (v) => upd({ allow_open_arm: !v }), "Prohibit arming when open"),
         this._sel({ boolean: {} }, !!rule.trigger_on_close_only, (v) => upd({ trigger_on_close_only: !!v }), "Trigger only when closing"),
         this._sel({ boolean: {} }, !!rule.trigger_unknown_unavailable, (v) => upd({ trigger_unknown_unavailable: !!v }), "Trigger when becomes unknown OR unavailable"),
@@ -368,12 +366,19 @@ class HAPanelNGAlarm extends HTMLElement {
     (this._data.users || []).forEach((u, idx) => {
       const item = document.createElement("div");
       item.className = "item";
+      const details = document.createElement("details");
+      details.open = !u.name;
+      const summary = document.createElement("summary");
+      summary.textContent = u.name || `User #${idx + 1}`;
+      details.appendChild(summary);
+
       const row = document.createElement("div");
       row.className = "row";
       const upd = (patch) => {
         const users = [...(this._data.users || [])];
         users[idx] = { ...users[idx], ...patch };
         this._data.users = users;
+        summary.textContent = users[idx].name || `User #${idx + 1}`;
       };
 
       const modeOptions = this._modeOptions();
@@ -399,8 +404,9 @@ class HAPanelNGAlarm extends HTMLElement {
         this._renderActions();
       });
 
-      item.appendChild(row);
-      item.appendChild(del);
+      details.appendChild(row);
+      details.appendChild(del);
+      item.appendChild(details);
       host.appendChild(item);
     });
   }
@@ -425,15 +431,23 @@ class HAPanelNGAlarm extends HTMLElement {
     (this._data.actions || []).forEach((action, idx) => {
       const item = document.createElement("div");
       item.className = "item";
+      const details = document.createElement("details");
+      details.open = !action.name;
+      const summary = document.createElement("summary");
+      summary.textContent = action.name || `Action #${idx + 1}`;
+      details.appendChild(summary);
+
       const row = document.createElement("div");
       row.className = "row";
       const upd = (patch) => {
         const actions = [...(this._data.actions || [])];
         actions[idx] = { ...actions[idx], ...patch };
         this._data.actions = actions;
+        summary.textContent = actions[idx].name || `Action #${idx + 1}`;
       };
 
       row.append(
+        this._sel({ text: {} }, action.name || "", (v) => upd({ name: v }), "Action name"),
         this._sel({ select: { mode: "dropdown", options: stateOptions } }, (action.from || ["any"])[0] || "any", (v) => upd({ from: [v || "any"] }), "From state"),
         this._sel({ select: { mode: "dropdown", options: stateOptions } }, (action.to || ["any"])[0] || "any", (v) => upd({ to: [v || "any"] }), "To state"),
         this._sel({ select: { mode: "dropdown", options: throughOptions } }, (action.through || ["any"])[0] || "any", (v) => upd({ through: [v || "any"] }), "Through mode"),
@@ -452,8 +466,9 @@ class HAPanelNGAlarm extends HTMLElement {
         this._renderActions();
       });
 
-      item.appendChild(row);
-      item.appendChild(del);
+      details.appendChild(row);
+      details.appendChild(del);
+      item.appendChild(details);
       host.appendChild(item);
     });
   }
@@ -470,10 +485,6 @@ class HAPanelNGAlarm extends HTMLElement {
         actions: [],
         ...data,
       };
-
-      const form = this.shadowRoot.getElementById("form-general");
-      form.hass = this._hass;
-      form.data = this._data;
 
       this._renderModes();
       this._renderSensors();

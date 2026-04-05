@@ -75,6 +75,11 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+FEATURE_ARM_NIGHT = int(getattr(AlarmControlPanelEntityFeature, "ARM_NIGHT", 0))
+FEATURE_ARM_VACATION = int(getattr(AlarmControlPanelEntityFeature, "ARM_VACATION", 0))
+STATE_ARMED_NIGHT = getattr(AlarmControlPanelState, "ARMED_NIGHT", AlarmControlPanelState.ARMED_HOME)
+STATE_ARMED_VACATION = getattr(AlarmControlPanelState, "ARMED_VACATION", AlarmControlPanelState.ARMED_AWAY)
+
 
 def _normalize_mode_id(value: str | None) -> str:
     return str(value or "").strip().lower().replace(" ", "_")
@@ -82,6 +87,10 @@ def _normalize_mode_id(value: str | None) -> str:
 
 def _state_str(state: AlarmControlPanelState) -> str:
     """Return legacy string representation for scripts."""
+    if state == STATE_ARMED_NIGHT:
+        return "armed_night"
+    if state == STATE_ARMED_VACATION:
+        return "armed_vacation"
     return {
         AlarmControlPanelState.DISARMED: "disarmed",
         AlarmControlPanelState.ARMING: "arming",
@@ -89,7 +98,7 @@ def _state_str(state: AlarmControlPanelState) -> str:
         AlarmControlPanelState.ARMED_HOME: "armed_home",
         AlarmControlPanelState.PENDING: "pending",
         AlarmControlPanelState.TRIGGERED: "triggered",
-    }[state]
+    }.get(state, "unknown")
 
 
 async def async_setup_entry(
@@ -106,7 +115,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
     """NG Alarm control panel implementation."""
 
     _attr_supported_features = (
-        AlarmControlPanelEntityFeature.ARM_AWAY | AlarmControlPanelEntityFeature.ARM_HOME
+        AlarmControlPanelEntityFeature.ARM_AWAY
+        | AlarmControlPanelEntityFeature.ARM_HOME
+        | FEATURE_ARM_NIGHT
+        | FEATURE_ARM_VACATION
     )
     _attr_code_format = CodeFormat.TEXT
     _attr_code_arm_required = False
@@ -162,6 +174,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._armed_mode = {
                 "armed_away": AlarmControlPanelState.ARMED_AWAY,
                 "armed_home": AlarmControlPanelState.ARMED_HOME,
+                "armed_night": STATE_ARMED_NIGHT,
+                "armed_vacation": STATE_ARMED_VACATION,
             }.get(raw_mode)
             self._triggered_sensor = saved.get("triggered_sensor", UNKNOWN)
             self._triggered_sensor_name = saved.get("triggered_sensor_name", UNKNOWN)
@@ -173,6 +187,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if self._alarm_state in (
             AlarmControlPanelState.ARMED_AWAY,
             AlarmControlPanelState.ARMED_HOME,
+            STATE_ARMED_NIGHT,
+            STATE_ARMED_VACATION,
         ):
             self._async_refresh_sensor_listener()
 
@@ -256,7 +272,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             return default
 
     def _authorize_arm(self, code: str | None, mode_id: str) -> str | None:
-        require_code = bool(self._config.get(CONF_REQUIRE_CODE_TO_ARM, True))
+        mode_cfg = self._mode_config(mode_id)
+        require_code = bool(
+            (mode_cfg or {}).get(
+                "require_code_to_arm",
+                self._config.get(CONF_REQUIRE_CODE_TO_ARM, True),
+            )
+        )
         mode_id = _normalize_mode_id(mode_id)
         if self._with_users():
             if not require_code and not str(code or "").strip():
@@ -477,6 +499,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if self._alarm_state in (
             AlarmControlPanelState.ARMED_AWAY,
             AlarmControlPanelState.ARMED_HOME,
+            STATE_ARMED_NIGHT,
+            STATE_ARMED_VACATION,
         ):
             self._async_refresh_sensor_listener()
 
@@ -484,6 +508,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if self._alarm_state not in (
             AlarmControlPanelState.ARMED_AWAY,
             AlarmControlPanelState.ARMED_HOME,
+            STATE_ARMED_NIGHT,
+            STATE_ARMED_VACATION,
         ):
             return
 
@@ -608,6 +634,36 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._mode_delay("exit_delay", int(self._config.get(CONF_EXIT_DELAY_HOME, 0))),
         )
 
+    async def async_alarm_arm_night(self, code=None) -> None:
+        self._current_mode_id = self._resolve_mode_for_arm("night")
+        actor = self._authorize_arm(code, self._current_mode_id)
+        if actor is None:
+            await self._async_log_event("denied", "Denied arm night: code/permission/mode mismatch")
+            return
+        self._last_actor = actor
+        if self._current_mode_id == UNKNOWN:
+            await self._async_log_event("denied", "Denied arm night: no modes configured")
+            return
+        await self._async_arm(
+            STATE_ARMED_NIGHT,
+            self._mode_delay("exit_delay", int(self._config.get(CONF_EXIT_DELAY_HOME, 0))),
+        )
+
+    async def async_alarm_arm_vacation(self, code=None) -> None:
+        self._current_mode_id = self._resolve_mode_for_arm("vacation")
+        actor = self._authorize_arm(code, self._current_mode_id)
+        if actor is None:
+            await self._async_log_event("denied", "Denied arm vacation: code/permission/mode mismatch")
+            return
+        self._last_actor = actor
+        if self._current_mode_id == UNKNOWN:
+            await self._async_log_event("denied", "Denied arm vacation: no modes configured")
+            return
+        await self._async_arm(
+            STATE_ARMED_VACATION,
+            self._mode_delay("exit_delay", int(self._config.get(CONF_EXIT_DELAY_AWAY, 0))),
+        )
+
     async def _async_arm(self, mode: AlarmControlPanelState, delay: int) -> None:
         self._cancel_timers()
         self._triggered_sensor = UNKNOWN
@@ -714,6 +770,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if self._alarm_state in (
             AlarmControlPanelState.ARMED_AWAY,
             AlarmControlPanelState.ARMED_HOME,
+            STATE_ARMED_NIGHT,
+            STATE_ARMED_VACATION,
             AlarmControlPanelState.PENDING,
         ):
             self._last_actor = actor
