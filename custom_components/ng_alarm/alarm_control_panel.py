@@ -331,8 +331,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     @property
     def code_arm_required(self) -> bool:
-        # Keep keypad behavior stable in HA frontend; mode-level enforcement is done in backend.
-        return True
+        return False
 
     def _resolve_mode_for_arm(self, target: str) -> str:
         target = str(target).strip().lower()
@@ -397,6 +396,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 self._config.get(CONF_REQUIRE_CODE_TO_ARM, True),
             )
         )
+        arm_type = str(self._current_arm_type or "").strip().lower()
+        delays = (mode_cfg or {}).get("delays", {}) if isinstance((mode_cfg or {}).get("delays", {}), dict) else {}
+        if arm_type and arm_type in delays and isinstance(delays.get(arm_type), dict):
+            require_code = bool(delays[arm_type].get("require_code_to_arm", require_code))
         mode_id = _normalize_mode_id(mode_id)
         if self._with_users():
             if not require_code and not str(code or "").strip():

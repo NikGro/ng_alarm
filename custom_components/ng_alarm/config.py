@@ -169,11 +169,13 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
             at_timeout = str(at_cfg.get("timeout_action", mode.get(CONF_MODE_TIMEOUT_ACTION, "none")) or "none").strip().lower()
             if at_timeout not in {"none", "disarm", "rearm"}:
                 at_timeout = "none"
+            at_require_code = bool(at_cfg.get("require_code_to_arm", mode.get("require_code_to_arm", True)))
             delays[at] = {
                 "exit_delay": at_exit,
                 "entry_delay": at_entry,
                 "alarm_duration": at_alarm_dur,
                 "timeout_action": at_timeout,
+                "require_code_to_arm": at_require_code,
             }
 
         modes.append(

@@ -377,24 +377,36 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ text: {} }, mode.id || "", (v) => upd({ id: v }), "Zone ID"),
         this._sel({ text: {} }, mode.name || "", (v) => upd({ name: v }), "Zone name"),
         this._sel({ icon: {} }, mode.icon || "mdi:shield", (v) => upd({ icon: v }), "Zone icon"),
-        this._sel({ select: { multiple: true, mode: "dropdown", options: [{ value: "away", label: "Away" }, { value: "home", label: "Home" }, { value: "night", label: "Night" }, { value: "vacation", label: "Vacation" }] } }, selectedArmTypes, (v) => { upd({ arm_types: v || [] }); this._renderModes(); }, "Arm types available in this zone"),
-        this._sel({ boolean: {} }, !!mode.require_code_to_arm, (v) => upd({ require_code_to_arm: !!v }), "Code required for arming"),
       );
 
-      const delays = { ...(mode.delays || {}) };
       const typeLabel = { away: "Away", home: "Home", night: "Night", vacation: "Vacation" };
-      selectedArmTypes.forEach((t) => {
-        const cur = delays[t] || {};
-        const setCur = (patch) => {
-          delays[t] = { ...cur, ...patch };
-          upd({ delays: delays });
-        };
+      const delays = { ...(mode.delays || {}) };
+      ["away", "home", "night", "vacation"].forEach((t) => {
+        const enabled = selectedArmTypes.includes(t);
         row.append(
-          this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.exit_delay ?? mode.exit_delay ?? 60, (v) => setCur({ exit_delay: Number(v || 0) }), `${typeLabel[t]} exit delay`),
-          this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.entry_delay ?? mode.entry_delay ?? 30, (v) => setCur({ entry_delay: Number(v || 0) }), `${typeLabel[t]} pending delay`),
-          this._sel({ number: { min: 0, max: 3600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.alarm_duration ?? mode.alarm_duration ?? 0, (v) => setCur({ alarm_duration: Number(v || 0) }), `${typeLabel[t]} alarm duration (0 = infinite)`),
-          this._sel({ select: { mode: "dropdown", options: [{ value: "none", label: "No timeout action" }, { value: "disarm", label: "Disarm after duration" }, { value: "rearm", label: "Re-arm after duration" }] } }, cur.timeout_action || mode.timeout_action || "none", (v) => setCur({ timeout_action: v || "none" }), `${typeLabel[t]} after duration`),
+          this._sel({ boolean: {} }, enabled, (v) => {
+            const set = new Set(selectedArmTypes);
+            if (v) set.add(t); else set.delete(t);
+            const next = Array.from(set);
+            upd({ arm_types: next, arm_target: next[0] || "away" });
+            this._renderModes();
+          }, `Enable ${typeLabel[t]} arm type`)
         );
+
+        if (enabled) {
+          const cur = delays[t] || {};
+          const setCur = (patch) => {
+            delays[t] = { ...cur, ...patch };
+            upd({ delays: delays });
+          };
+          row.append(
+            this._sel({ boolean: {} }, !!cur.require_code_to_arm, (v) => setCur({ require_code_to_arm: !!v }), `${typeLabel[t]}: code required for arming`),
+            this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.exit_delay ?? mode.exit_delay ?? 60, (v) => setCur({ exit_delay: Number(v || 0) }), `${typeLabel[t]} exit delay`),
+            this._sel({ number: { min: 0, max: 600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.entry_delay ?? mode.entry_delay ?? 30, (v) => setCur({ entry_delay: Number(v || 0) }), `${typeLabel[t]} pending delay`),
+            this._sel({ number: { min: 0, max: 3600, step: 1, mode: "box", unit_of_measurement: "s" } }, cur.alarm_duration ?? mode.alarm_duration ?? 0, (v) => setCur({ alarm_duration: Number(v || 0) }), `${typeLabel[t]} alarm duration (0 = infinite)`),
+            this._sel({ select: { mode: "dropdown", options: [{ value: "none", label: "No timeout action" }, { value: "disarm", label: "Disarm after duration" }, { value: "rearm", label: "Re-arm after duration" }] } }, cur.timeout_action || mode.timeout_action || "none", (v) => setCur({ timeout_action: v || "none" }), `${typeLabel[t]} after duration`),
+          );
+        }
       });
 
       const del = document.createElement("button");
@@ -509,7 +521,6 @@ class HAPanelNGAlarm extends HTMLElement {
 
       row.append(
         this._sel({ entity: { filter: { domain: "binary_sensor" } } }, rule.entity_id || "", (v) => upd({ entity_id: v }), "Sensor"),
-        this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.modes || [], (v) => upd({ modes: v || [] }), "Modes used in"),
       );
 
       const sep = document.createElement("hr");
@@ -517,6 +528,7 @@ class HAPanelNGAlarm extends HTMLElement {
       row.appendChild(sep);
 
       row.append(
+        this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.modes || [], (v) => upd({ modes: v || [] }), "Modes used in"),
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, rule.bypass_modes || [], (v) => upd({ bypass_modes: v || [] }), "Modes bypassed when zone bypass is active"),
         this._sel({ select: { multiple: true, mode: "dropdown", options: globalBypassOptions } }, rule.bypass_global_ids || [], (v) => upd({ bypass_global_ids: v || [] }), "Global bypass elements"),
         this._sel({ boolean: {} }, !rule.allow_open_arm, (v) => upd({ allow_open_arm: !v }), "Prohibit arming when open"),
