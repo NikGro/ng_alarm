@@ -10,6 +10,7 @@ class HAPanelNGAlarm extends HTMLElement {
     this._selectedEventZone = "all";
     this._openZoneDetails = {};
     this._openGlobalBypassDetails = {};
+    this._sensorConfigClipboard = null;
     this._activeTab = "general";
   }
 
@@ -70,8 +71,11 @@ class HAPanelNGAlarm extends HTMLElement {
           align-items:center;
           min-height: 56px;
           margin: 0 0 10px;
-          padding: 0 8px;
-          width: 100%;
+          padding: 0 12px;
+          width: 100vw;
+          position: relative;
+          left: 50%;
+          transform: translateX(-50%);
           box-sizing: border-box;
           background: var(--app-header-background-color, var(--card-background-color));
           border-bottom: 1px solid var(--divider-color);
@@ -162,6 +166,30 @@ class HAPanelNGAlarm extends HTMLElement {
         .inline-test-result.ok { color: #1b8f3a; font-weight: 600; }
         .inline-test-result.err { color: #b00020; font-weight: 600; }
         .hint-inline { font-size: 0.82rem; color: var(--secondary-text-color); margin-top: -4px; }
+        .summary-with-handle {
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap: 10px;
+          width: 100%;
+        }
+        .summary-main {
+          display:inline-flex;
+          align-items:center;
+          gap: 8px;
+          min-width: 0;
+        }
+        .summary-main-text {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .summary-handle {
+          color: var(--secondary-text-color);
+          opacity: 0.85;
+          display: inline-flex;
+          align-items: center;
+        }
 
         @media (max-width: 800px) {
           .wrap { max-width: 100%; padding: 0 10px 10px; }
@@ -717,7 +745,15 @@ class HAPanelNGAlarm extends HTMLElement {
       const st = rule.entity_id ? this._hass?.states?.[rule.entity_id] : null;
       const icon = this._sensorIcon(st);
       const name = st?.attributes?.friendly_name || rule.entity_id || `Sensor rule #${idx + 1}`;
-      summary.innerHTML = `<ha-icon icon="${icon}"></ha-icon> ${name}`;
+      summary.innerHTML = `
+        <span class="summary-with-handle">
+          <span class="summary-main">
+            <ha-icon icon="${icon}"></ha-icon>
+            <span class="summary-main-text">${name}</span>
+          </span>
+          <span class="summary-handle"><ha-icon icon="mdi:menu"></ha-icon></span>
+        </span>
+      `;
       details.appendChild(summary);
 
       const row = document.createElement("div");
@@ -730,7 +766,15 @@ class HAPanelNGAlarm extends HTMLElement {
         const s = rules[idx].entity_id ? this._hass?.states?.[rules[idx].entity_id] : null;
         const iconNow = this._sensorIcon(s);
         const nameNow = s?.attributes?.friendly_name || rules[idx].entity_id || `Sensor rule #${idx + 1}`;
-        summary.innerHTML = `<ha-icon icon="${iconNow}"></ha-icon> ${nameNow}`;
+        summary.innerHTML = `
+          <span class="summary-with-handle">
+            <span class="summary-main">
+              <ha-icon icon="${iconNow}"></ha-icon>
+              <span class="summary-main-text">${nameNow}</span>
+            </span>
+            <span class="summary-handle"><ha-icon icon="mdi:menu"></ha-icon></span>
+          </span>
+        `;
       };
 
       row.append(
@@ -794,8 +838,41 @@ class HAPanelNGAlarm extends HTMLElement {
         this._renderSensors();
       });
 
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "btn";
+      copyBtn.type = "button";
+      copyBtn.textContent = "Copy config";
+      copyBtn.addEventListener("click", () => {
+        this._sensorConfigClipboard = {
+          modes: [...(rule.modes || [])],
+          bypass_modes: [...(rule.bypass_modes || [])],
+          bypass_global_ids: [...(rule.bypass_global_ids || [])],
+          allow_open_arm: !!rule.allow_open_arm,
+          trigger_on_open_only: !!rule.trigger_on_open_only,
+          trigger_unknown_unavailable: !!rule.trigger_unknown_unavailable,
+        };
+        this._status("Sensor config copied.", "ok");
+      });
+
+      const pasteBtn = document.createElement("button");
+      pasteBtn.className = "btn";
+      pasteBtn.type = "button";
+      pasteBtn.textContent = "Paste config";
+      pasteBtn.addEventListener("click", () => {
+        if (!this._sensorConfigClipboard) {
+          this._status("No copied sensor config available.", "error");
+          return;
+        }
+        upd({ ...this._sensorConfigClipboard });
+        this._status("Sensor config pasted.", "ok");
+      });
+
+      const btnRow = document.createElement("div");
+      btnRow.className = "action-btn-row";
+      btnRow.append(copyBtn, pasteBtn, del);
+
       details.appendChild(row);
-      details.appendChild(del);
+      details.appendChild(btnRow);
       item.appendChild(details);
       host.appendChild(item);
     });
