@@ -399,6 +399,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         return action
 
     def _authorize_arm(self, code: str | None, mode_id: str) -> str | None:
+        target_mode_cfg = self._mode_config(mode_id) or {}
+        current_mode_cfg = self._mode_config(self._current_mode_id) or target_mode_cfg
         is_mode_change = self._alarm_state in {
             AlarmControlPanelState.ARMING,
             AlarmControlPanelState.ARMED_AWAY,
@@ -409,9 +411,19 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             AlarmControlPanelState.TRIGGERED,
         }
         if is_mode_change:
-            require_code = bool(self._config.get(CONF_REQUIRE_CODE_TO_MODE_CHANGE, True))
+            require_code = bool(
+                current_mode_cfg.get(
+                    "require_code_to_mode_change",
+                    self._config.get(CONF_REQUIRE_CODE_TO_MODE_CHANGE, True),
+                )
+            )
         else:
-            require_code = bool(self._config.get(CONF_REQUIRE_CODE_TO_ARM, True))
+            require_code = bool(
+                target_mode_cfg.get(
+                    "require_code_to_arm",
+                    self._config.get(CONF_REQUIRE_CODE_TO_ARM, True),
+                )
+            )
 
         mode_id = _normalize_mode_id(mode_id)
         cleaned_code = _clean_code(code)
@@ -936,7 +948,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         code = _clean_code(code)
         panic = False
         actor = UNKNOWN
-        require_code = bool(self._config.get(CONF_REQUIRE_CODE_TO_DISARM, True))
+        mode_cfg = self._mode_config(self._current_mode_id) or {}
+        require_code = bool(
+            mode_cfg.get(
+                "require_code_to_disarm",
+                self._config.get(CONF_REQUIRE_CODE_TO_DISARM, True),
+            )
+        )
 
         if not require_code:
             if self._with_users() and code:

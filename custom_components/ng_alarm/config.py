@@ -133,6 +133,12 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
         ]
         arm_types = [v for v in arm_types if v in {"away", "home", "night", "vacation"}] or [arm_target if arm_target in {"away","home","night","vacation"} else "away"]
         require_code_to_arm = bool(mode.get("require_code_to_arm", True))
+        require_code_to_mode_change = bool(
+            mode.get("require_code_to_mode_change", data.get(CONF_REQUIRE_CODE_TO_MODE_CHANGE, True))
+        )
+        require_code_to_disarm = bool(
+            mode.get("require_code_to_disarm", data.get(CONF_REQUIRE_CODE_TO_DISARM, True))
+        )
         bypass_mode = str(mode.get("bypass_mode") or "none").strip().lower()
         bypass_entities = [
             str(v).strip() for v in mode.get("bypass_entities", []) if str(v).strip()
@@ -197,6 +203,8 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                 "arm_target": arm_target,
                 "arm_types": arm_types,
                 "require_code_to_arm": require_code_to_arm,
+                "require_code_to_mode_change": require_code_to_mode_change,
+                "require_code_to_disarm": require_code_to_disarm,
                 "exit_delay": exit_delay,
                 "entry_delay": entry_delay,
                 CONF_MODE_ALARM_DURATION: alarm_duration,

@@ -33,6 +33,8 @@ class HAPanelNGAlarm extends HTMLElement {
     this.shadowRoot.querySelectorAll("ha-form, ha-selector").forEach((el) => {
       el.hass = hass;
     });
+    const mb = this.shadowRoot.getElementById("open-sidebar");
+    if (mb) mb.hass = hass;
     const subtitle = this.shadowRoot.getElementById("subtitle");
     if (subtitle) subtitle.textContent = this._t("Configuration without legacy master codes", "Konfiguration ohne Legacy-Master-Codes");
     const ge = this.shadowRoot.getElementById("general-empty");
@@ -50,7 +52,8 @@ class HAPanelNGAlarm extends HTMLElement {
       <style>
         :host { display:block; height:100%; box-sizing:border-box; }
         .wrap { padding: 12px; max-width: 980px; margin: 0 auto; color: var(--primary-text-color); }
-        .head { display:flex; align-items:center; gap:10px; margin-bottom: 12px; }
+        .head-native { display:flex; align-items:center; min-height: 44px; margin-bottom: 8px; }
+        .brand { display:flex; align-items:center; gap:10px; margin-bottom: 12px; }
         .logo { width:40px; height:40px; border-radius:10px; object-fit:cover; border:1px solid var(--divider-color); }
         h1 { margin:0; font-size: 24px; }
         .muted { color: var(--secondary-text-color); font-size: 0.9rem; }
@@ -63,6 +66,9 @@ class HAPanelNGAlarm extends HTMLElement {
           border-radius: 10px;
           padding: 8px 11px;
           cursor:pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
         }
         .tab.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
 
@@ -107,10 +113,11 @@ class HAPanelNGAlarm extends HTMLElement {
       </style>
 
       <div class="wrap">
-        <div class="head" style="border:1px solid var(--divider-color);border-radius:10px;padding:6px 8px;">
-          <button id="open-sidebar" class="btn" type="button" style="width:36px;height:36px;padding:0" title="Open sidebar">
-            <ha-icon icon="mdi:menu"></ha-icon>
-          </button>
+        <div class="head-native">
+          <ha-menu-button id="open-sidebar"></ha-menu-button>
+        </div>
+
+        <div class="brand">
           <img class="logo" src="/ng_alarm_static/alarm_icon.jpg" alt="Alarm Icon" />
           <div>
             <h1>Alarm</h1>
@@ -119,12 +126,12 @@ class HAPanelNGAlarm extends HTMLElement {
         </div>
 
         <div class="tabs">
-          <button class="tab" data-tab="general">⚙️ General</button>
-          <button class="tab" data-tab="modes">🧩 Zones</button>
-          <button class="tab" data-tab="sensors">🧲 Sensors</button>
-          <button class="tab" data-tab="users">👤 Users</button>
-          <button class="tab" data-tab="actions">🎬 Actions</button>
-          <button class="tab" data-tab="events">📜 Events</button>
+          <button class="tab" data-tab="general"><ha-icon icon="mdi:cog-outline"></ha-icon>General</button>
+          <button class="tab" data-tab="modes"><ha-icon icon="mdi:shape-outline"></ha-icon>Zones</button>
+          <button class="tab" data-tab="sensors"><ha-icon icon="mdi:motion-sensor"></ha-icon>Sensors</button>
+          <button class="tab" data-tab="users"><ha-icon icon="mdi:account-outline"></ha-icon>Users</button>
+          <button class="tab" data-tab="actions"><ha-icon icon="mdi:script-text-outline"></ha-icon>Actions</button>
+          <button class="tab" data-tab="events"><ha-icon icon="mdi:history"></ha-icon>Events</button>
         </div>
 
         <div id="general" class="section">
@@ -211,7 +218,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("modes-add").addEventListener("click", () => {
       const modes = [...(this._data.modes || [])];
-      modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", arm_types: ["away"], require_code_to_arm: false, exit_delay: 60, entry_delay: 30, bypass_mode: "none", bypass_entities: [], bypass_template: "" });
+      modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", arm_types: ["away"], require_code_to_arm: true, require_code_to_mode_change: true, require_code_to_disarm: true, exit_delay: 60, entry_delay: 30, bypass_mode: "none", bypass_entities: [], bypass_template: "" });
       this._data.modes = modes;
       this._renderModes();
     });
@@ -352,12 +359,6 @@ class HAPanelNGAlarm extends HTMLElement {
 
     host.append(
       this._sel(
-        { text: {} },
-        this._data.name || "NG Alarm",
-        (v) => upd({ name: v || "NG Alarm" }),
-        this._t("Alarm name", "Alarmname")
-      ),
-      this._sel(
         {
           select: {
             mode: "dropdown",
@@ -370,24 +371,6 @@ class HAPanelNGAlarm extends HTMLElement {
         this._data.code_input_mode || "pin",
         (v) => upd({ code_input_mode: v || "pin" }),
         this._t("Code input mode", "Code-Eingabemodus")
-      ),
-      this._sel(
-        { boolean: {} },
-        !!this._data.require_code_to_arm,
-        (v) => upd({ require_code_to_arm: !!v }),
-        this._t("Code required for arming", "Code für Scharfschalten erforderlich")
-      ),
-      this._sel(
-        { boolean: {} },
-        !!this._data.require_code_to_mode_change,
-        (v) => upd({ require_code_to_mode_change: !!v }),
-        this._t("Code required for mode change", "Code für Moduswechsel erforderlich")
-      ),
-      this._sel(
-        { boolean: {} },
-        !!this._data.require_code_to_disarm,
-        (v) => upd({ require_code_to_disarm: !!v }),
-        this._t("Code required for disarming", "Code für Unscharfschalten erforderlich")
       ),
     );
   }
@@ -435,6 +418,9 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ text: {} }, mode.id || "", (v) => upd({ id: v }), "Zone ID"),
         this._sel({ text: {} }, mode.name || "", (v) => upd({ name: v }), "Zone name"),
         this._sel({ icon: {} }, mode.icon || "mdi:shield", (v) => upd({ icon: v }), "Zone icon"),
+        this._sel({ boolean: {} }, mode.require_code_to_arm !== false, (v) => upd({ require_code_to_arm: !!v }), "Code required for arming"),
+        this._sel({ boolean: {} }, mode.require_code_to_mode_change !== false, (v) => upd({ require_code_to_mode_change: !!v }), "Code required for mode change"),
+        this._sel({ boolean: {} }, mode.require_code_to_disarm !== false, (v) => upd({ require_code_to_disarm: !!v }), "Code required for disarming"),
       );
 
       const sepBase = document.createElement("hr");
