@@ -51,24 +51,34 @@ class HAPanelNGAlarm extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>
         :host { display:block; height:100%; box-sizing:border-box; }
-        .wrap { padding: 12px; max-width: 980px; margin: 0 auto; color: var(--primary-text-color); }
-        .head-native { display:flex; align-items:center; min-height: 44px; margin-bottom: 8px; }
+        .wrap { padding: 0 12px 12px; max-width: 980px; margin: 0 auto; color: var(--primary-text-color); }
+        .head-native {
+          display:flex;
+          align-items:center;
+          min-height: 56px;
+          margin: 0 -12px 10px;
+          padding: 0 8px;
+          background: var(--app-header-background-color, var(--card-background-color));
+          border-bottom: 1px solid var(--divider-color);
+        }
         .brand { display:flex; align-items:center; gap:10px; margin-bottom: 12px; }
         .logo { width:40px; height:40px; border-radius:10px; object-fit:cover; border:1px solid var(--divider-color); }
         h1 { margin:0; font-size: 24px; }
         .muted { color: var(--secondary-text-color); font-size: 0.9rem; }
 
-        .tabs { display:flex; flex-wrap:wrap; gap:8px; margin: 12px 0; }
+        .tabs { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; margin: 12px 0; }
         .tab {
           border:1px solid var(--divider-color);
           background: var(--card-background-color);
           color: var(--primary-text-color);
-          border-radius: 10px;
-          padding: 8px 11px;
+          border-radius: 999px;
+          padding: 6px 10px;
           cursor:pointer;
           display: inline-flex;
           align-items: center;
           gap: 6px;
+          min-height: 38px;
+          font-size: 0.95rem;
         }
         .tab.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
 
@@ -95,7 +105,7 @@ class HAPanelNGAlarm extends HTMLElement {
           padding: 8px 12px;
           cursor:pointer;
         }
-        .btn.primary { border:none; background: var(--primary-color); color:white; font-weight:600; }
+        .btn.primary { border:none; background: var(--primary-color); color:white; font-weight:600; border-radius: 999px; }
         .btn.danger { border-color:#b00020; color:#b00020; margin-top: 0; }
         .item .btn.danger { margin-top: 10px; }
         #events .btn.danger { margin-top: 0; }
@@ -108,7 +118,7 @@ class HAPanelNGAlarm extends HTMLElement {
         @media (max-width: 800px) {
           .wrap { max-width: 100%; padding: 10px; }
           .row { grid-template-columns: 1fr; }
-          .tabs .tab { flex: 1 1 auto; min-width: 42%; }
+          .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
       </style>
 
