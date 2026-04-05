@@ -69,8 +69,10 @@ class HAPanelNGAlarm extends HTMLElement {
           display:flex;
           align-items:center;
           min-height: 56px;
-          margin: 0 calc(50% - 50vw) 10px;
+          margin: 0 0 10px;
           padding: 0 8px;
+          width: 100%;
+          box-sizing: border-box;
           background: var(--app-header-background-color, var(--card-background-color));
           border-bottom: 1px solid var(--divider-color);
         }
@@ -99,7 +101,7 @@ class HAPanelNGAlarm extends HTMLElement {
         .head-version { font-size: 0.85rem; color: var(--secondary-text-color); }
         .muted { color: var(--secondary-text-color); font-size: 0.9rem; }
 
-        .tabs { display:flex; flex-wrap:nowrap; gap:8px; margin: 12px 0; overflow:auto; }
+        .tabs { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin: 12px 0; }
         .tab {
           border:1px solid var(--divider-color);
           background: var(--card-background-color);
@@ -163,7 +165,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
         @media (max-width: 800px) {
           .wrap { max-width: 100%; padding: 0 10px 10px; }
-          .tabs { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+          .tabs { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; justify-content: stretch; }
           .tab { flex: 1 1 auto; }
           .btn-save { min-width: 156px; }
         }
@@ -687,11 +689,33 @@ class HAPanelNGAlarm extends HTMLElement {
     (this._data.sensor_rules || []).forEach((rule, idx) => {
       const item = document.createElement("div");
       item.className = "item";
+      item.draggable = true;
+      item.dataset.index = String(idx);
+      item.addEventListener("dragstart", (ev) => {
+        ev.dataTransfer.effectAllowed = "move";
+        ev.dataTransfer.setData("text/plain", String(idx));
+      });
+      item.addEventListener("dragover", (ev) => {
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = "move";
+      });
+      item.addEventListener("drop", (ev) => {
+        ev.preventDefault();
+        const from = Number(ev.dataTransfer.getData("text/plain"));
+        const to = Number(item.dataset.index);
+        if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
+        const rules = [...(this._data.sensor_rules || [])];
+        const [moved] = rules.splice(from, 1);
+        rules.splice(to, 0, moved);
+        this._data.sensor_rules = rules;
+        this._renderSensors();
+      });
+
       const details = document.createElement("details");
       details.open = !rule.entity_id;
       const summary = document.createElement("summary");
       const st = rule.entity_id ? this._hass?.states?.[rule.entity_id] : null;
-      const icon = st?.attributes?.icon || "mdi:motion-sensor";
+      const icon = this._sensorIcon(st);
       const name = st?.attributes?.friendly_name || rule.entity_id || `Sensor rule #${idx + 1}`;
       summary.innerHTML = `<ha-icon icon="${icon}"></ha-icon> ${name}`;
       details.appendChild(summary);
@@ -704,7 +728,7 @@ class HAPanelNGAlarm extends HTMLElement {
         rules[idx] = { ...rules[idx], ...patch };
         this._data.sensor_rules = rules;
         const s = rules[idx].entity_id ? this._hass?.states?.[rules[idx].entity_id] : null;
-        const iconNow = s?.attributes?.icon || "mdi:motion-sensor";
+        const iconNow = this._sensorIcon(s);
         const nameNow = s?.attributes?.friendly_name || rules[idx].entity_id || `Sensor rule #${idx + 1}`;
         summary.innerHTML = `<ha-icon icon="${iconNow}"></ha-icon> ${nameNow}`;
       };
@@ -775,6 +799,15 @@ class HAPanelNGAlarm extends HTMLElement {
       item.appendChild(details);
       host.appendChild(item);
     });
+  }
+
+  _sensorIcon(st) {
+    const explicit = st?.attributes?.icon;
+    if (explicit) return explicit;
+    const dc = String(st?.attributes?.device_class || "").toLowerCase();
+    if (["door", "window", "opening", "garage_door"].includes(dc)) return "mdi:door";
+    if (["motion", "occupancy", "presence"].includes(dc)) return "mdi:motion-sensor";
+    return "mdi:shield-alert-outline";
   }
 
   _renderUsers() {
