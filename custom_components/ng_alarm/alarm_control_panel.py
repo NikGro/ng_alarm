@@ -91,9 +91,16 @@ def _normalize_mode_id(value: str | None) -> str:
 
 
 def _clean_code(value) -> str:
+    """Normalize buggy keypad input into a usable code string."""
     code = str(value or "")
-    if code.startswith("undefined"):
-        code = code.replace("undefined", "", 1)
+    # Known HA frontend glitch can prepend text like "undefined".
+    code = code.replace("undefined", "")
+    code = code.strip()
+    # If mixed text slips through, keep only digits for PIN matching.
+    if any(ch.isdigit() for ch in code):
+        digits = "".join(ch for ch in code if ch.isdigit())
+        if digits:
+            code = digits
     return code
 
 
@@ -139,7 +146,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
     """NG Alarm control panel implementation."""
 
     _attr_code_format = CodeFormat.NUMBER
-    _attr_code_arm_required = True
+    _attr_code_arm_required = False
 
     def __init__(self, hass: HomeAssistant, config: dict[str, Any], zone_id: str | None = None) -> None:
         self.hass = hass
@@ -331,8 +338,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     @property
     def code_arm_required(self) -> bool:
-        # Keep keypad visible/consistent; backend enforces per-zone/per-arm-type requirement.
-        return True
+        # Per-zone/per-arm-type enforcement is handled in backend authorization.
+        return False
 
     def _resolve_mode_for_arm(self, target: str) -> str:
         target = str(target).strip().lower()
