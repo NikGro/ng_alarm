@@ -581,6 +581,18 @@ class HAPanelNGAlarm extends HTMLElement {
         row.append(this._sel({ template: {} }, rule.template || "", (v) => upd({ template: v }), "Template"));
       }
 
+      const test = document.createElement("button");
+      test.className = "btn";
+      test.type = "button";
+      test.textContent = "Test condition";
+      test.addEventListener("click", async () => {
+        const current = (this._data.global_bypass_rules || [])[idx] || {};
+        const result = await this._testGlobalBypassRule(current);
+        this._status(
+          `Global bypass \"${current.name || current.id || `#${idx + 1}`}\": ${result ? "ACTIVE" : "inactive"}`
+        );
+      });
+
       const del = document.createElement("button");
       del.className = "btn danger";
       del.type = "button";
@@ -594,10 +606,36 @@ class HAPanelNGAlarm extends HTMLElement {
       });
 
       details.appendChild(row);
+      details.appendChild(test);
       details.appendChild(del);
       item.appendChild(details);
       host.appendChild(item);
     });
+  }
+
+  async _testGlobalBypassRule(rule) {
+    const mode = String(rule?.mode || "entity_state").toLowerCase();
+    try {
+      if (mode === "template") {
+        const tpl = String(rule?.template || "").trim();
+        if (!tpl) return false;
+        const rendered = await this._hass.callApi("post", "template", { template: tpl });
+        const out = String(rendered || "").trim().toLowerCase();
+        return ["1", "true", "on", "yes", "open", "home", "active"].includes(out);
+      }
+
+      const entities = Array.isArray(rule?.entities) ? rule.entities : [];
+      if (!entities.length) return false;
+      const truthy = new Set(["on", "true", "open", "home", "active", "1", "unlocked"]);
+      for (const eid of entities) {
+        const st = String(this._hass?.states?.[eid]?.state || "").toLowerCase();
+        if (truthy.has(st)) return true;
+      }
+      return false;
+    } catch (err) {
+      this._status(`Bypass test failed: ${err.message}`, "error");
+      return false;
+    }
   }
 
   _renderSensors() {
@@ -834,7 +872,7 @@ class HAPanelNGAlarm extends HTMLElement {
       this._renderEventSensorToggle();
       this._updateHeaderVersion();
 
-      this._status("Configuration loaded.", "ok");
+      this._status("Configuration loaded.");
     } catch (err) {
       this._status(`Load failed: ${err.message}`, "error");
     }
