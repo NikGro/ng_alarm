@@ -13,6 +13,7 @@ class HAPanelNGAlarm extends HTMLElement {
     this._openSensorDetails = {};
     this._sensorConfigClipboard = null;
     this._sensorDropIndicator = null;
+    this._dragIndicators = {};
     this._haUsers = [];
     this._autosaveTimer = null;
     this._autosaveInFlight = false;
@@ -664,7 +665,7 @@ class HAPanelNGAlarm extends HTMLElement {
         this._openZoneDetails[zoneKey] = details.open;
       });
       const summary = document.createElement("summary");
-      summary.innerHTML = `<ha-icon icon="${mode.icon || "mdi:shield"}"></ha-icon> ${mode.name || mode.id || `Zone #${idx + 1}`}`;
+      summary.innerHTML = this._summaryWithHandle(mode.icon || "mdi:shield", mode.name || mode.id || `Zone #${idx + 1}`);
       details.appendChild(summary);
 
       const row = document.createElement("div");
@@ -676,7 +677,7 @@ class HAPanelNGAlarm extends HTMLElement {
         if ((!next.id || patch.name !== undefined) && next.name) next.id = this._slugify(next.name);
         modes[idx] = next;
         this._data.modes = modes;
-        summary.innerHTML = `<ha-icon icon="${next.icon || "mdi:shield"}"></ha-icon> ${next.name || next.id || `Zone #${idx + 1}`}`;
+        summary.innerHTML = this._summaryWithHandle(next.icon || "mdi:shield", next.name || next.id || `Zone #${idx + 1}`);
       };
 
       const selectedArmTypes = Array.isArray(mode.arm_types) && mode.arm_types.length
@@ -787,7 +788,7 @@ class HAPanelNGAlarm extends HTMLElement {
         this._openGlobalBypassDetails[key] = details.open;
       });
       const summary = document.createElement("summary");
-      summary.innerHTML = `<ha-icon icon="${rule.icon || "mdi:swap-horizontal"}"></ha-icon> ${rule.name || rule.id || `Global bypass #${idx + 1}`}`;
+      summary.innerHTML = this._summaryWithHandle(rule.icon || "mdi:swap-horizontal", rule.name || rule.id || `Global bypass #${idx + 1}`);
       details.appendChild(summary);
 
       const row = document.createElement("div");
@@ -798,7 +799,7 @@ class HAPanelNGAlarm extends HTMLElement {
         if ((!next.id || patch.name !== undefined) && next.name) next.id = this._slugify(next.name);
         arr[idx] = next;
         this._data.global_bypass_rules = arr;
-        summary.innerHTML = `<ha-icon icon="${next.icon || "mdi:swap-horizontal"}"></ha-icon> ${next.name || next.id || `Global bypass #${idx + 1}`}`;
+        summary.innerHTML = this._summaryWithHandle(next.icon || "mdi:swap-horizontal", next.name || next.id || `Global bypass #${idx + 1}`);
       };
 
       row.append(
@@ -1171,7 +1172,7 @@ class HAPanelNGAlarm extends HTMLElement {
       details.open = !u.name;
       const summary = document.createElement("summary");
       const userIcon = "mdi:account";
-      summary.innerHTML = `<ha-icon icon="${userIcon}"></ha-icon> ${u.name || `User #${idx + 1}`}`;
+      summary.innerHTML = this._summaryWithHandle(userIcon, u.name || `User #${idx + 1}`);
       details.appendChild(summary);
 
       const row = document.createElement("div");
@@ -1182,7 +1183,7 @@ class HAPanelNGAlarm extends HTMLElement {
         this._data.users = users;
         const iu = users[idx];
         const userIconNow = "mdi:account";
-        summary.innerHTML = `<ha-icon icon="${userIconNow}"></ha-icon> ${iu.name || `User #${idx + 1}`}`;
+        summary.innerHTML = this._summaryWithHandle(userIconNow, iu.name || `User #${idx + 1}`);
       };
 
       const modeOptions = this._zoneModeOptions();
@@ -1295,7 +1296,7 @@ class HAPanelNGAlarm extends HTMLElement {
       const details = document.createElement("details");
       details.open = !action.name;
       const summary = document.createElement("summary");
-      summary.innerHTML = `<ha-icon icon="${action.icon || "mdi:script-text-outline"}"></ha-icon> ${action.name || `Action #${idx + 1}`}`;
+      summary.innerHTML = this._summaryWithHandle(action.icon || "mdi:script-text-outline", action.name || `Action #${idx + 1}`);
       details.appendChild(summary);
 
       const row = document.createElement("div");
@@ -1305,7 +1306,7 @@ class HAPanelNGAlarm extends HTMLElement {
         actions[idx] = { ...actions[idx], ...patch, through_mode: ["any"] };
         this._data.actions = actions;
         const a = actions[idx];
-        summary.innerHTML = `<ha-icon icon="${a.icon || "mdi:script-text-outline"}"></ha-icon> ${a.name || `Action #${idx + 1}`}`;
+        summary.innerHTML = this._summaryWithHandle(a.icon || "mdi:script-text-outline", a.name || `Action #${idx + 1}`);
       };
 
       const selectedZones = Array.isArray(action.through) && action.through.length ? action.through : ["any"];
@@ -1671,31 +1672,64 @@ class HAPanelNGAlarm extends HTMLElement {
     if (level === "error") s.classList.add("status-error");
   }
 
+  _summaryWithHandle(icon, text) {
+    return `
+      <span class="summary-with-handle">
+        <span class="summary-main">
+          <ha-icon icon="${icon}"></ha-icon>
+          <span class="summary-main-text">${text}</span>
+        </span>
+        <span class="summary-handle"><ha-icon icon="mdi:menu"></ha-icon></span>
+      </span>
+    `;
+  }
+
   _bindSimpleDnD(item, idx, host, key, rerender) {
     item.draggable = true;
     item.dataset.index = String(idx);
     item.addEventListener("dragstart", (ev) => {
       ev.dataTransfer.effectAllowed = "move";
       ev.dataTransfer.setData("text/plain", String(idx));
+      this._dragIndicators[key] = null;
+      item.classList.add("dragging");
+    });
+    item.addEventListener("dragend", () => {
+      item.classList.remove("dragging");
+      host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
+      this._dragIndicators[key] = null;
     });
     item.addEventListener("dragover", (ev) => {
       ev.preventDefault();
       ev.dataTransfer.dropEffect = "move";
       const rect = item.getBoundingClientRect();
-      const before = ev.clientY < rect.top + rect.height / 2;
+      const upper = rect.top + rect.height * 0.35;
+      const lower = rect.top + rect.height * 0.65;
+      let before = true;
+      if (ev.clientY <= upper) before = true;
+      else if (ev.clientY >= lower) before = false;
+      else if (this._dragIndicators[key] && this._dragIndicators[key].idx === idx) before = this._dragIndicators[key].before;
+      else before = ev.clientY < rect.top + rect.height / 2;
+
+      const changed = !this._dragIndicators[key]
+        || this._dragIndicators[key].idx !== idx
+        || this._dragIndicators[key].before !== before;
+      if (!changed) return;
+
+      this._dragIndicators[key] = { idx, before };
       host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
       item.classList.add(before ? "drag-over-before" : "drag-over-after");
     });
     item.addEventListener("dragleave", () => {
-      item.classList.remove("drag-over-before", "drag-over-after");
+      // keep marker stable until next dragover/drop
     });
     item.addEventListener("drop", (ev) => {
       ev.preventDefault();
       const from = Number(ev.dataTransfer.getData("text/plain"));
       const to = Number(item.dataset.index);
       if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
-      const rect = item.getBoundingClientRect();
-      const before = ev.clientY < rect.top + rect.height / 2;
+      const before = this._dragIndicators[key] && this._dragIndicators[key].idx === to
+        ? this._dragIndicators[key].before
+        : ev.clientY < (item.getBoundingClientRect().top + item.getBoundingClientRect().height / 2);
       const arr = [...(this._data[key] || [])];
       const [moved] = arr.splice(from, 1);
       let insertAt = to;
@@ -1706,6 +1740,7 @@ class HAPanelNGAlarm extends HTMLElement {
       arr.splice(insertAt, 0, moved);
       this._data[key] = arr;
       host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
+      this._dragIndicators[key] = null;
       rerender();
       this._scheduleAutosave();
     });
