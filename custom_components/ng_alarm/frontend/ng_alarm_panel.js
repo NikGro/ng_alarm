@@ -495,6 +495,57 @@ class HAPanelNGAlarm extends HTMLElement {
     return `${zoneName} (${map[String(armType).toLowerCase()] || armType})`;
   }
 
+  _actionStateOptionsForZone(zoneId) {
+    const anyZone = !zoneId || zoneId === "any";
+    const modeMap = {
+      away: { value: "armed_away", en: "Armed Away", de: "Scharf Abwesend" },
+      home: { value: "armed_home", en: "Armed Home", de: "Scharf Zuhause" },
+      night: { value: "armed_night", en: "Armed Night", de: "Scharf Nacht" },
+      vacation: { value: "armed_vacation", en: "Armed Vacation", de: "Scharf Urlaub" },
+    };
+
+    let armTypes = new Set();
+    if (anyZone) {
+      (this._data.modes || []).forEach((z) => {
+        const types = Array.isArray(z.arm_types) && z.arm_types.length ? z.arm_types : [z.arm_target || "away"];
+        types.forEach((t) => armTypes.add(String(t || "").toLowerCase()));
+      });
+      if (!armTypes.size) armTypes = new Set(["away", "home"]);
+    } else {
+      const z = (this._data.modes || []).find((m) => String(m.id || "") === String(zoneId));
+      const types = z ? (Array.isArray(z.arm_types) && z.arm_types.length ? z.arm_types : [z.arm_target || "away"]) : [];
+      types.forEach((t) => armTypes.add(String(t || "").toLowerCase()));
+      if (!armTypes.size) armTypes = new Set(["away"]);
+    }
+
+    const opts = [
+      { value: "any", label: this._t("Any", "Beliebig") },
+      { value: "disarmed", label: this._t("Disarmed", "Unscharf") },
+      { value: "arming", label: this._t("Arming", "Scharfschalten") },
+      { value: "pending", label: this._t("Pending", "Auslöseverzögerung") },
+      { value: "triggered", label: this._t("Triggered", "Ausgelöst") },
+      { value: "arm_blocked", label: this._t("Arm blocked", "Scharfschalten blockiert") },
+    ];
+
+    const anyZoneText = this._t("in any zone", "in beliebiger Zone");
+    Array.from(armTypes).forEach((t) => {
+      const meta = modeMap[t];
+      if (!meta) return;
+      const label = anyZone
+        ? `${this._t(meta.en, meta.de)} (${anyZoneText})`
+        : this._t(meta.en, meta.de);
+      opts.splice(3, 0, { value: meta.value, label });
+    });
+
+    return opts;
+  }
+
+  _actionToOptions(fromState, options) {
+    const from = String(fromState || "any");
+    if (!from || from === "any") return options;
+    return options.filter((o) => o.value === "any" || o.value !== from);
+  }
+
   _renderGeneral() {
     const host = this.shadowRoot.getElementById("general-settings-list");
     if (!host) return;
@@ -1080,24 +1131,7 @@ class HAPanelNGAlarm extends HTMLElement {
     if (!host) return;
     host.innerHTML = "";
 
-    const stateOptions = [
-      { value: "any", label: "Any" },
-      { value: "disarmed", label: "Disarmed" },
-      { value: "arming", label: "Arming" },
-      { value: "armed_home", label: "Armed Home" },
-      { value: "armed_away", label: "Armed Away" },
-      { value: "pending", label: "Pending" },
-      { value: "triggered", label: "Triggered" },
-      { value: "arm_blocked", label: this._t("Arm blocked", "Scharfschalten blockiert") },
-    ];
-    const throughZoneOptions = [{ value: "any", label: "Any" }, ...this._modeOptions()];
-    const throughModeOptions = [
-      { value: "any", label: "Any" },
-      { value: "away", label: "Away" },
-      { value: "home", label: "Home" },
-      { value: "night", label: "Night" },
-      { value: "vacation", label: "Vacation" },
-    ];
+    const throughZoneOptions = [{ value: "any", label: this._t("Any zone", "Beliebige Zone") }, ...this._modeOptions()];
     const userOptions = [
       { value: "any_actor", label: this._t("Any User / Any Sensor", "Beliebiger Benutzer / Beliebiger Sensor") },
       { value: "any_user", label: this._t("Any User", "Beliebiger Benutzer") },
@@ -1121,19 +1155,39 @@ class HAPanelNGAlarm extends HTMLElement {
       row.className = "row";
       const upd = (patch) => {
         const actions = [...(this._data.actions || [])];
-        actions[idx] = { ...actions[idx], ...patch };
+        actions[idx] = { ...actions[idx], ...patch, through_mode: ["any"] };
         this._data.actions = actions;
         const a = actions[idx];
         summary.innerHTML = `<ha-icon icon="${a.icon || "mdi:script-text-outline"}"></ha-icon> ${a.name || `Action #${idx + 1}`}`;
       };
 
+      const selectedZone = (action.through || ["any"])[0] || "any";
+      const stateOptions = this._actionStateOptionsForZone(selectedZone);
+      const selectedFrom = (action.from || ["any"])[0] || "any";
+      const toOptions = this._actionToOptions(selectedFrom, stateOptions);
+
       row.append(
         this._sel({ text: {} }, action.name || "", (v) => upd({ name: v }), "Action name"),
         this._sel({ icon: {} }, action.icon || "mdi:script-text-outline", (v) => upd({ icon: v }), "Icon"),
-        this._sel({ select: { mode: "dropdown", options: stateOptions } }, (action.from || ["any"])[0] || "any", (v) => upd({ from: [v || "any"] }), "From state"),
-        this._sel({ select: { mode: "dropdown", options: stateOptions } }, (action.to || ["any"])[0] || "any", (v) => upd({ to: [v || "any"] }), "To state"),
-        this._sel({ select: { mode: "dropdown", options: throughZoneOptions } }, (action.through || ["any"])[0] || "any", (v) => upd({ through: [v || "any"] }), "Through zone"),
-        this._sel({ select: { mode: "dropdown", options: throughModeOptions } }, (action.through_mode || ["any"])[0] || "any", (v) => upd({ through_mode: [v || "any"] }), "Through mode"),
+        this._sel(
+          { select: { mode: "dropdown", options: throughZoneOptions } },
+          selectedZone,
+          (v) => {
+            upd({ through: [v || "any"], from: ["any"], to: ["any"] });
+            this._renderActions();
+          },
+          this._t("Zone", "Zone")
+        ),
+        this._sel(
+          { select: { mode: "dropdown", options: stateOptions } },
+          selectedFrom,
+          (v) => {
+            upd({ from: [v || "any"], to: ["any"] });
+            this._renderActions();
+          },
+          this._t("From state", "Von Zustand")
+        ),
+        this._sel({ select: { mode: "dropdown", options: toOptions } }, (action.to || ["any"])[0] || "any", (v) => upd({ to: [v || "any"] }), this._t("To state", "Zu Zustand")),
         this._sel({ select: { mode: "dropdown", options: userOptions } }, action.by_user || "any_actor", (v) => upd({ by_user: v || "any_actor" }), "By"),
       );
       const sep = document.createElement("hr");
@@ -1237,6 +1291,10 @@ class HAPanelNGAlarm extends HTMLElement {
         actions: [],
         ...data,
       };
+
+      if (Array.isArray(this._data.actions)) {
+        this._data.actions = this._data.actions.map((a) => ({ ...a, through_mode: ["any"] }));
+      }
 
       this._renderGeneral();
       this._renderModes();
