@@ -1133,10 +1133,10 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ boolean: {} }, !!u.can_arm, (v) => upd({ can_arm: !!v }), "Can arm"),
         this._sel({ boolean: {} }, !!u.can_arm_override, (v) => upd({ can_arm_override: !!v }), this._t("Can arm with override", "Kann mit Override scharf schalten")),
         this._sel(
-          { text: {} },
-          Array.isArray(u.ha_user_ids) ? u.ha_user_ids.join(", ") : "",
-          (v) => upd({ ha_user_ids: String(v || "").split(",").map((x) => x.trim()).filter(Boolean) }),
-          this._t("HA user IDs (comma-separated)", "HA-Benutzer-IDs (kommagetrennt)")
+          { user: { multiple: true } },
+          Array.isArray(u.ha_user_ids) ? u.ha_user_ids : [],
+          (v) => upd({ ha_user_ids: Array.isArray(v) ? v : [] }),
+          this._t("Linked HA users", "Verknüpfte HA-Benutzer")
         ),
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.arm_modes || [], (v) => upd({ arm_modes: v || [] }), "Arm modes"),
         this._sel({ boolean: {} }, !!u.can_disarm, (v) => upd({ can_disarm: !!v }), "Can disarm"),
