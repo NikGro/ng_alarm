@@ -396,7 +396,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("users-add").addEventListener("click", () => {
       const users = [...(this._data.users || [])];
-      users.push({ name: "", code: "", can_arm: true, can_arm_override: false, can_disarm: true, arm_modes: [], disarm_modes: [] });
+      users.push({ name: "", code: "", can_arm: true, can_arm_override: false, can_disarm: true, ha_user_ids: [], arm_modes: [], disarm_modes: [] });
       this._data.users = users;
       this._renderUsers();
       this._scheduleAutosave();
@@ -1132,6 +1132,12 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ text: { type: "password" } }, u.code || "", (v) => upd({ code: v }), "Code"),
         this._sel({ boolean: {} }, !!u.can_arm, (v) => upd({ can_arm: !!v }), "Can arm"),
         this._sel({ boolean: {} }, !!u.can_arm_override, (v) => upd({ can_arm_override: !!v }), this._t("Can arm with override", "Kann mit Override scharf schalten")),
+        this._sel(
+          { text: {} },
+          Array.isArray(u.ha_user_ids) ? u.ha_user_ids.join(", ") : "",
+          (v) => upd({ ha_user_ids: String(v || "").split(",").map((x) => x.trim()).filter(Boolean) }),
+          this._t("HA user IDs (comma-separated)", "HA-Benutzer-IDs (kommagetrennt)")
+        ),
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.arm_modes || [], (v) => upd({ arm_modes: v || [] }), "Arm modes"),
         this._sel({ boolean: {} }, !!u.can_disarm, (v) => upd({ can_disarm: !!v }), "Can disarm"),
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.disarm_modes || [], (v) => upd({ disarm_modes: v || [] }), "Disarm modes"),

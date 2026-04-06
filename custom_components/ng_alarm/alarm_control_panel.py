@@ -70,6 +70,7 @@ from .const import (
     CONF_USER_CAN_ARM,
     CONF_USER_CAN_ARM_OVERRIDE,
     CONF_USER_CAN_DISARM,
+    CONF_USER_HA_USER_IDS,
     CONF_USER_ARM_MODES,
     CONF_USER_DISARM_MODES,
     CONF_USER_CODE,
@@ -400,6 +401,34 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 return user
         return None
 
+    def _resolve_user_from_ha_user_id(self, ha_user_id: str | None) -> dict[str, Any] | None:
+        uid = str(ha_user_id or "").strip()
+        if not uid:
+            return None
+        for user in self._config.get(CONF_USERS, []):
+            ids = [str(v).strip() for v in (user.get(CONF_USER_HA_USER_IDS, []) or []) if str(v).strip()]
+            if uid in ids:
+                return user
+        return None
+
+    def _any_ha_user_mapping_defined(self) -> bool:
+        for user in self._config.get(CONF_USERS, []):
+            ids = [str(v).strip() for v in (user.get(CONF_USER_HA_USER_IDS, []) or []) if str(v).strip()]
+            if ids:
+                return True
+        return False
+
+    def _user_can_arm_mode(self, user: dict[str, Any], mode_id: str) -> bool:
+        if not bool(user.get(CONF_USER_CAN_ARM, False)):
+            return False
+        allowed_raw = [str(v).strip().lower() for v in user.get(CONF_USER_ARM_MODES, []) if str(v).strip()]
+        if not allowed_raw:
+            return True
+        allowed_zone = {_normalize_mode_id(v.split(":", 1)[0]) for v in allowed_raw}
+        allowed_pairs = set(allowed_raw)
+        current_pair = f"{mode_id}:{self._current_arm_type}"
+        return mode_id in allowed_zone or current_pair in allowed_pairs
+
     def _with_users(self) -> bool:
         return bool(self._config.get(CONF_USERS))
 
@@ -500,21 +529,34 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         mode_id = _normalize_mode_id(mode_id)
         cleaned_code = _clean_code(code)
 
-        # Hard rule requested: if code is not required for this arm type, allow arming directly.
         if not require_code:
+            # Optional: map HA UI user to alarm user for permission checks.
+            if self._with_users():
+                # If a code is still entered, prefer explicit alarm-user lookup.
+                if cleaned_code:
+                    user = self._resolve_user_from_code(cleaned_code)
+                    if not user or not self._user_can_arm_mode(user, mode_id):
+                        return None
+                    self._arm_override_requested = bool(user.get(CONF_USER_CAN_ARM_OVERRIDE, False))
+                    return self._actor_name(user)
+
+                ctx = getattr(self, "_context", None)
+                mapped = self._resolve_user_from_ha_user_id(getattr(ctx, "user_id", None))
+                if mapped:
+                    if not self._user_can_arm_mode(mapped, mode_id):
+                        return None
+                    self._arm_override_requested = bool(mapped.get(CONF_USER_CAN_ARM_OVERRIDE, False))
+                    return self._actor_name(mapped)
+
+                # If mappings are defined, block unmapped UI users.
+                if self._any_ha_user_mapping_defined():
+                    return None
             return UNKNOWN
 
         if self._with_users():
             user = self._resolve_user_from_code(cleaned_code)
-            if not user or not bool(user.get(CONF_USER_CAN_ARM, False)):
+            if not user or not self._user_can_arm_mode(user, mode_id):
                 return None
-            allowed_raw = [str(v).strip().lower() for v in user.get(CONF_USER_ARM_MODES, []) if str(v).strip()]
-            if allowed_raw:
-                allowed_zone = {_normalize_mode_id(v.split(":", 1)[0]) for v in allowed_raw}
-                allowed_pairs = set(allowed_raw)
-                current_pair = f"{mode_id}:{self._current_arm_type}"
-                if mode_id not in allowed_zone and current_pair not in allowed_pairs:
-                    return None
             self._arm_override_requested = bool(user.get(CONF_USER_CAN_ARM_OVERRIDE, False))
             return self._actor_name(user)
 

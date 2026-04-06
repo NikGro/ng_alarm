@@ -43,6 +43,7 @@ from .const import (
     CONF_USER_CAN_ARM,
     CONF_USER_CAN_ARM_OVERRIDE,
     CONF_USER_CAN_DISARM,
+    CONF_USER_HA_USER_IDS,
     CONF_USER_ARM_MODES,
     CONF_USER_DISARM_MODES,
     CONF_USER_CODE,
@@ -303,6 +304,10 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
             for v in user.get(CONF_USER_DISARM_MODES, [])
             if str(v).strip()
         ]
+        raw_ha_user_ids = user.get(CONF_USER_HA_USER_IDS, [])
+        if isinstance(raw_ha_user_ids, str):
+            raw_ha_user_ids = [v.strip() for v in raw_ha_user_ids.split(",") if v.strip()]
+        ha_user_ids = [str(v).strip() for v in (raw_ha_user_ids or []) if str(v).strip()]
         users.append(
             {
                 CONF_USER_NAME: name or f"User {len(users) + 1}",
@@ -310,6 +315,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                 CONF_USER_CAN_ARM: bool(user.get(CONF_USER_CAN_ARM, True)),
                 CONF_USER_CAN_ARM_OVERRIDE: bool(user.get(CONF_USER_CAN_ARM_OVERRIDE, False)),
                 CONF_USER_CAN_DISARM: bool(user.get(CONF_USER_CAN_DISARM, True)),
+                CONF_USER_HA_USER_IDS: ha_user_ids,
                 CONF_USER_ARM_MODES: arm_modes,
                 CONF_USER_DISARM_MODES: disarm_modes,
             }
