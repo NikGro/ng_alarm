@@ -312,7 +312,11 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                     s.async_write_ha_state()
 
     async def _async_log_event(self, event_type: str, message: str, **meta: Any) -> None:
-        zone = self._zone_id or "main"
+        zone_raw = meta.get("zone", self._zone_id or "main")
+        if isinstance(zone_raw, list):
+            zone = ", ".join(str(v) for v in zone_raw if str(v).strip()) or "main"
+        else:
+            zone = str(zone_raw or "main")
         sensors = meta.get("sensors")
         sensor_list = [str(v) for v in sensors] if isinstance(sensors, list) else []
         if not sensor_list and self._triggered_sensor not in {None, "", UNKNOWN}:
@@ -331,7 +335,6 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             "event": event_type,
             "message": message,
             "zone": zone,
-            "zones": [zone],
             "from_state": meta.get("from_state", "N/A"),
             "to_state": meta.get("to_state", _state_str(self._alarm_state)),
             "cause_user": cause_user,
@@ -529,7 +532,6 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
         variables = {
             "zone": self._zone_id or "main",
-            "zones": [self._zone_id or "main"],
             "arm_type": through_mode,
             "from_state": from_state,
             "to_state": to_state,
@@ -584,7 +586,6 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
     async def _async_run_scripts(self, key: str, alarm_state: str, pending_seconds: int | None = None) -> None:
         variables = {
             "zone": self._zone_id or "main",
-            "zones": [self._zone_id or "main"],
             "arm_type": self._current_arm_type,
             "pending_seconds": int(pending_seconds or 0),
             "from_state": "N/A",

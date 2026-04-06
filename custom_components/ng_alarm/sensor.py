@@ -81,7 +81,6 @@ class NGAlarmEventLogSensor(SensorEntity):
         by_actor = str(last.get("cause_user") or last.get("by") or last.get("actor") or "N/A")
         return {
             "zone": zone,
-            "zones": last.get("zones", [zone]),
             "event_count": len(events),
             "last_event": last.get("event"),
             "cause_user": by_actor,

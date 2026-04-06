@@ -295,7 +295,7 @@ class HAPanelNGAlarm extends HTMLElement {
             <div id="actions-list" class="list"></div>
             <button id="actions-add" class="btn" type="button">${this._t("+ Add action", "+ Aktion hinzufügen")}</button>
             <div class="muted card-subtitle" style="margin-top:10px">
-              ${this._t("Variables available", "Verfügbare Variablen")}: <code>zone</code>, <code>zones</code>, <code>from_state</code>, <code>to_state</code>, <code>cause_user</code>, <code>cause_sensor</code>, <code>cause_sensor_name</code>, <code>pending_seconds</code>.
+              ${this._t("Variables available", "Verfügbare Variablen")}: <code>zone</code>, <code>from_state</code>, <code>to_state</code>, <code>cause_user</code>, <code>cause_sensor</code>, <code>cause_sensor_name</code>, <code>pending_seconds</code>.
             </div>
           </ha-card>
         </div>
@@ -1287,8 +1287,9 @@ class HAPanelNGAlarm extends HTMLElement {
         ? (action.through.find((z) => z && z !== "any") || action.through[0] || "main")
         : "main";
       const variables = {
-        zone: testZone,
-        zones: [testZone],
+        zone: Array.isArray(action.through) && action.through.length
+          ? action.through.filter((z) => z && z !== "any").join(", ") || "main"
+          : testZone,
         from_state: "disarmed",
         to_state: "triggered",
         cause_user: "UI (test_user)",
