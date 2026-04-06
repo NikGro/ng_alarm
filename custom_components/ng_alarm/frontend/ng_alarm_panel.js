@@ -192,6 +192,7 @@ class HAPanelNGAlarm extends HTMLElement {
         .sensor-btn-top { display:flex; justify-content:center; gap:10px; }
         .sensor-btn-top .btn { min-width: 170px; min-height: 40px; border-radius: 999px; }
         .sensor-btn-delete { margin-top: 12px; display:flex; justify-content:flex-start; }
+        .system-notice-wrap { margin-top: 12px; margin-bottom: 10px; }
         .summary-with-handle {
           display:inline-flex;
           align-items:center;
@@ -1266,7 +1267,7 @@ class HAPanelNGAlarm extends HTMLElement {
       "Eingebauter Hinweis bei erforderlichem zweitem Scharfschalten. Er kann nicht gelöscht, nur aktiviert/deaktiviert werden."
     );
     const sysBtn = document.createElement("button");
-    sysBtn.className = "btn pill-gray";
+    sysBtn.className = "btn danger";
     sysBtn.type = "button";
     const syncSysBtn = () => {
       const enabled = this._data.override_required_persistent_notice !== false;
@@ -1282,7 +1283,7 @@ class HAPanelNGAlarm extends HTMLElement {
     });
 
     const sysBox = document.createElement("div");
-    sysBox.className = "sensor-btn-row";
+    sysBox.className = "sensor-btn-row system-notice-wrap";
     const sysTop = document.createElement("div");
     sysTop.className = "sensor-btn-top";
     sysTop.append(sysBtn);
@@ -1741,17 +1742,21 @@ class HAPanelNGAlarm extends HTMLElement {
       ev.preventDefault();
       const from = Number(ev.dataTransfer.getData("text/plain"));
       const to = Number(item.dataset.index);
-      if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
+      if (Number.isNaN(from) || Number.isNaN(to)) return;
       const before = this._dragIndicators[key] && this._dragIndicators[key].idx === to
         ? this._dragIndicators[key].before
         : ev.clientY < (item.getBoundingClientRect().top + item.getBoundingClientRect().height / 2);
       const arr = [...(this._data[key] || [])];
       const [moved] = arr.splice(from, 1);
-      let insertAt = to;
-      if (!before) insertAt = to + (from < to ? 0 : 1);
-      else insertAt = to + (from < to ? -1 : 0);
+      let insertAt = to + (before ? 0 : 1);
+      if (from < insertAt) insertAt -= 1;
       if (insertAt < 0) insertAt = 0;
       if (insertAt > arr.length) insertAt = arr.length;
+      if (insertAt === from) {
+        host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
+        this._dragIndicators[key] = null;
+        return;
+      }
       arr.splice(insertAt, 0, moved);
       this._data[key] = arr;
       host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
