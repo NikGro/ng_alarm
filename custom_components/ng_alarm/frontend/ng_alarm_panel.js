@@ -595,6 +595,12 @@ class HAPanelNGAlarm extends HTMLElement {
         (v) => upd({ code_input_mode: v || "pin" }),
         this._t("Code input mode", "Code-Eingabemodus")
       ),
+      this._sel(
+        { number: { min: 5, max: 120, step: 1, mode: "box", unit_of_measurement: "s" } },
+        Number(this._data.arm_override_confirm_window ?? 20),
+        (v) => upd({ arm_override_confirm_window: Math.max(5, Number(v || 20)) }),
+        this._t("Force-arm confirm window", "Force-Arm Bestätigungsfenster")
+      ),
     );
   }
 
@@ -1337,6 +1343,7 @@ class HAPanelNGAlarm extends HTMLElement {
         require_code_to_mode_change: true,
         require_code_to_disarm: true,
         code_input_mode: "pin",
+        arm_override_confirm_window: 20,
         expose_event_log_sensor: false,
         modes: [],
         global_bypass_rules: [],

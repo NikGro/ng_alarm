@@ -23,6 +23,7 @@ from .const import (
     ATTR_ACTOR,
     ATTR_TRIGGERED_SENSOR,
     ATTR_TRIGGERED_SENSOR_NAME,
+    CONF_ARM_OVERRIDE_CONFIRM_WINDOW,
     CONF_ACTIONS,
     CONF_ACTION_BY_USER,
     CONF_ACTION_FROM,
@@ -178,10 +179,41 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._sensor_unsub = None
         self._bypass_unsub = None
         self._arm_override_requested = False
+        self._override_confirm_until = 0
+        self._override_confirm_mode_id = UNKNOWN
+        self._override_confirm_arm_type = UNKNOWN
+        self._override_confirm_sensors: list[str] = []
 
     def _apply_code_format(self) -> None:
         mode = str(self._config.get(CONF_CODE_INPUT_MODE, "pin") or "pin").strip().lower()
         self._attr_code_format = CodeFormat.TEXT if mode == "password" else CodeFormat.NUMBER
+
+    def _override_window(self) -> int:
+        try:
+            return max(5, int(self._config.get(CONF_ARM_OVERRIDE_CONFIRM_WINDOW, 20) or 20))
+        except (TypeError, ValueError):
+            return 20
+
+    def _clear_override_confirmation(self) -> None:
+        self._override_confirm_until = 0
+        self._override_confirm_mode_id = UNKNOWN
+        self._override_confirm_arm_type = UNKNOWN
+        self._override_confirm_sensors = []
+
+    def _set_override_confirmation(self, mode_id: str, arm_type: str, sensors: list[str]) -> None:
+        self._override_confirm_until = int(time.time()) + self._override_window()
+        self._override_confirm_mode_id = _normalize_mode_id(mode_id)
+        self._override_confirm_arm_type = str(arm_type or UNKNOWN).strip().lower()
+        self._override_confirm_sensors = list(sensors or [])
+
+    def _is_override_confirmation_valid(self, mode_id: str, arm_type: str) -> bool:
+        if int(time.time()) > int(self._override_confirm_until or 0):
+            return False
+        return (
+            _normalize_mode_id(mode_id) == _normalize_mode_id(self._override_confirm_mode_id)
+            and str(arm_type or UNKNOWN).strip().lower()
+            == str(self._override_confirm_arm_type or UNKNOWN).strip().lower()
+        )
 
     @property
     def supported_features(self) -> AlarmControlPanelEntityFeature:
@@ -254,6 +286,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._last_actor = saved.get("last_actor", UNKNOWN)
             self._current_mode_id = saved.get("current_mode_id", UNKNOWN)
             self._current_arm_type = saved.get("current_arm_type", UNKNOWN)
+            self._override_confirm_until = int(saved.get("override_confirm_until") or 0)
+            self._override_confirm_mode_id = str(saved.get("override_confirm_mode_id", UNKNOWN) or UNKNOWN)
+            self._override_confirm_arm_type = str(saved.get("override_confirm_arm_type", UNKNOWN) or UNKNOWN)
+            self._override_confirm_sensors = [str(v) for v in (saved.get("override_confirm_sensors") or []) if str(v).strip()]
             self._event_log = list(saved.get("event_log", []))[-200:]
 
         await self._async_bind_bypass_listener()
@@ -273,6 +309,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._config = new_config
         self._apply_code_format()
         self._attr_name = self._config.get(CONF_NAME, "NG Alarm")
+        if int(time.time()) > int(self._override_confirm_until or 0):
+            self._clear_override_confirmation()
         await self._async_bind_bypass_listener()
         self._async_refresh_sensor_listener()
         self.async_write_ha_state()
@@ -292,6 +330,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 "last_actor": self._last_actor,
                 "current_mode_id": self._current_mode_id,
                 "current_arm_type": self._current_arm_type,
+                "override_confirm_until": self._override_confirm_until,
+                "override_confirm_mode_id": self._override_confirm_mode_id,
+                "override_confirm_arm_type": self._override_confirm_arm_type,
+                "override_confirm_sensors": self._override_confirm_sensors,
                 "event_log": self._event_log[-200:],
             }
         )
@@ -984,15 +1026,37 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
         if blocking:
             if self._arm_override_requested:
-                await self._async_log_event(
-                    "arm_override",
-                    "Arming override used despite open sensors",
-                    from_state=prev,
-                    to_state="arming" if delay > 0 else _state_str(mode),
-                    by=self._last_actor,
-                    sensors=blocking,
-                )
+                if self._is_override_confirmation_valid(self._current_mode_id, self._current_arm_type):
+                    await self._async_log_event(
+                        "arm_override_confirmed",
+                        "Arming override confirmed",
+                        from_state=prev,
+                        to_state="arming" if delay > 0 else _state_str(mode),
+                        by=self._last_actor,
+                        sensors=blocking,
+                    )
+                    self._clear_override_confirmation()
+                else:
+                    self._set_override_confirmation(self._current_mode_id, self._current_arm_type, blocking)
+                    await self._async_log_event(
+                        "arm_override_required",
+                        "Arming blocked: override confirmation required",
+                        from_state=prev,
+                        to_state=prev,
+                        by=self._last_actor,
+                        sensors=blocking,
+                        pending_seconds=self._override_window(),
+                    )
+                    await self._async_run_transition_actions(
+                        prev,
+                        "arm_blocked",
+                        "arm_blocked",
+                        pending_seconds=self._override_window(),
+                        blocking_sensors=blocking,
+                    )
+                    return
             else:
+                self._clear_override_confirmation()
                 await self._async_log_event(
                     "arm_blocked",
                     "Arming blocked due to open sensors",
@@ -1009,6 +1073,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                     blocking_sensors=blocking,
                 )
                 return
+
+        self._clear_override_confirmation()
 
         self._alarm_state = AlarmControlPanelState.ARMING if delay > 0 else mode
         self.async_write_ha_state()
@@ -1082,6 +1148,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._armed_mode = None
         self._current_mode_id = UNKNOWN
         self._current_arm_type = UNKNOWN
+        self._clear_override_confirmation()
         self._triggered_sensor = UNKNOWN
         self._triggered_sensor_name = UNKNOWN
         self.async_write_ha_state()

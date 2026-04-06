@@ -14,6 +14,7 @@ from .const import (
     CONF_ACTION_BY_USER,
     CONF_ACTION_FROM,
     CONF_ACTION_ICON,
+    CONF_ARM_OVERRIDE_CONFIRM_WINDOW,
     CONF_CODE_INPUT_MODE,
     CONF_ACTION_SCRIPTS,
     CONF_ACTION_TARGETS,
@@ -94,6 +95,9 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     )
     data[CONF_REQUIRE_CODE_TO_DISARM] = bool(
         data.get(CONF_REQUIRE_CODE_TO_DISARM, True)
+    )
+    data[CONF_ARM_OVERRIDE_CONFIRM_WINDOW] = max(
+        5, int(data.get(CONF_ARM_OVERRIDE_CONFIRM_WINDOW, 20) or 20)
     )
     mode = str(data.get(CONF_CODE_INPUT_MODE, "pin") or "pin").strip().lower()
     data[CONF_CODE_INPUT_MODE] = mode if mode in {"pin", "password"} else "pin"
