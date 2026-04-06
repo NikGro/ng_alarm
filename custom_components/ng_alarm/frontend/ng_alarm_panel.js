@@ -12,6 +12,7 @@ class HAPanelNGAlarm extends HTMLElement {
     this._openGlobalBypassDetails = {};
     this._openSensorDetails = {};
     this._sensorConfigClipboard = null;
+    this._actionConfigClipboard = null;
     this._sensorDropIndicator = null;
     this._dragIndicators = {};
     this._haUsers = [];
@@ -298,7 +299,7 @@ class HAPanelNGAlarm extends HTMLElement {
             <div id="actions-list" class="list"></div>
             <button id="actions-add" class="btn" type="button">${this._t("+ Add action", "+ Aktion hinzufügen")}</button>
             <div class="muted card-subtitle" style="margin-top:10px">
-              ${this._t("Variables available", "Verfügbare Variablen")}: <code>zone</code>, <code>zone_id</code>, <code>from_state</code>, <code>to_state</code>, <code>arm_type</code>, <code>cause_user</code>, <code>cause_sensor</code>, <code>cause_sensor_name</code>, <code>pending_seconds</code>.
+              ${this._t("Variables available", "Verfügbare Variablen")}: <code>zone</code>, <code>from_state</code>, <code>to_state</code>, <code>arm_type</code>, <code>cause_user</code>, <code>cause_sensor</code>, <code>cause_sensor_name</code>, <code>pending_seconds</code>.
             </div>
           </ha-card>
         </div>
@@ -1400,6 +1401,35 @@ class HAPanelNGAlarm extends HTMLElement {
         this._scheduleAutosave();
       });
 
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "btn pill-gray";
+      copyBtn.type = "button";
+      copyBtn.textContent = this._t("Copy action", "Aktion kopieren");
+      copyBtn.addEventListener("click", () => {
+        const current = (this._data.actions || [])[idx] || {};
+        this._actionConfigClipboard = JSON.parse(JSON.stringify(current));
+        this._status(this._t("Action copied.", "Aktion kopiert."), "ok");
+        this._flashButtonText(copyBtn, this._t("Copied!", "Kopiert!"), 1200, this._t("Copy action", "Aktion kopieren"));
+      });
+
+      const pasteBtn = document.createElement("button");
+      pasteBtn.className = "btn pill-gray";
+      pasteBtn.type = "button";
+      pasteBtn.textContent = this._t("Paste action", "Aktion einfügen");
+      pasteBtn.addEventListener("click", () => {
+        if (!this._actionConfigClipboard) {
+          this._status(this._t("No copied action available.", "Keine kopierte Aktion verfügbar."), "error");
+          return;
+        }
+        const actions = [...(this._data.actions || [])];
+        const currentName = actions[idx]?.name || "";
+        actions[idx] = { ...JSON.parse(JSON.stringify(this._actionConfigClipboard)), name: currentName || actions[idx]?.name || "" };
+        this._data.actions = actions;
+        this._renderActions();
+        this._scheduleAutosave();
+        this._status(this._t("Action pasted.", "Aktion eingefügt."), "ok");
+      });
+
       const test = document.createElement("button");
       test.className = "btn pill-gray";
       test.type = "button";
@@ -1419,7 +1449,7 @@ class HAPanelNGAlarm extends HTMLElement {
       btnRow.className = "sensor-btn-row";
       const btnTop = document.createElement("div");
       btnTop.className = "sensor-btn-top";
-      btnTop.append(test);
+      btnTop.append(copyBtn, pasteBtn, test);
       const btnDelete = document.createElement("div");
       btnDelete.className = "sensor-btn-delete";
       btnDelete.append(del);
@@ -1443,7 +1473,6 @@ class HAPanelNGAlarm extends HTMLElement {
         zone: Array.isArray(action.through) && action.through.length
           ? action.through.filter((z) => z && z !== "any").join(", ") || "main"
           : testZone,
-        zone_id: testZone,
         from_state: "disarmed",
         to_state: "triggered",
         arm_type: "away",
