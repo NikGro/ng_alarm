@@ -498,9 +498,18 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         to_state: str,
         alarm_state: str,
         pending_seconds: int | None = None,
+        blocking_sensors: list[str] | None = None,
     ) -> None:
         through_state = self._current_mode_id if self._current_mode_id != UNKNOWN else (_state_str(self._armed_mode) if self._armed_mode else UNKNOWN)
         through_mode = str(self._current_arm_type or UNKNOWN)
+        blocking_sensors = list(blocking_sensors or [])
+        blocking_sensor_names: list[str] = []
+        for eid in blocking_sensors:
+            st = self.hass.states.get(eid)
+            blocking_sensor_names.append(
+                st.attributes.get("friendly_name", eid) if st else eid
+            )
+
         variables = {
             ATTR_TRIGGERED_SENSOR: self._triggered_sensor,
             ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
@@ -512,6 +521,9 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             "from_state": from_state,
             "to_state": to_state,
             "pending_seconds": int(pending_seconds or 0),
+            "blocking_sensors": blocking_sensors,
+            "blocking_sensor_names": blocking_sensor_names,
+            "blocking_sensors_text": ", ".join(blocking_sensor_names),
         }
         for action in self._config.get(CONF_ACTIONS, []):
             if not isinstance(action, dict):
@@ -979,7 +991,12 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                     sensors=blocking,
                 )
                 # Trigger action-builder flows for blocked arming attempts.
-                await self._async_run_transition_actions(prev, "arm_blocked", "arm_blocked")
+                await self._async_run_transition_actions(
+                    prev,
+                    "arm_blocked",
+                    "arm_blocked",
+                    blocking_sensors=blocking,
+                )
                 return
 
         self._alarm_state = AlarmControlPanelState.ARMING if delay > 0 else mode
