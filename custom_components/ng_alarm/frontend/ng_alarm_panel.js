@@ -76,8 +76,11 @@ class HAPanelNGAlarm extends HTMLElement {
           display:flex;
           align-items:center;
           min-height: 56px;
-          margin: 0 calc(50% - 50vw) 10px;
+          margin: 0 -12px 10px;
           padding: 0 12px;
+          width: auto;
+          max-width: none;
+          overflow: hidden;
           box-sizing: border-box;
           background: var(--app-header-background-color, var(--card-background-color));
           border-bottom: 1px solid var(--divider-color);
@@ -90,12 +93,12 @@ class HAPanelNGAlarm extends HTMLElement {
           border: none !important;
           background: transparent !important;
           box-shadow: none !important;
-          display: inline-flex;
+          display: none;
           align-items: center;
           justify-content: center;
         }
         .head-title {
-          margin-left: 8px;
+          margin-left: 0;
           font-size: 1rem;
           font-weight: 600;
           line-height: 1;
@@ -104,7 +107,7 @@ class HAPanelNGAlarm extends HTMLElement {
           align-items: center;
         }
         .head-spacer { flex: 1; }
-        .head-version { font-size: 0.85rem; color: var(--secondary-text-color); }
+        .head-version { font-size: 0.85rem; color: var(--secondary-text-color); padding-right: 2px; }
         .muted { color: var(--secondary-text-color); font-size: 0.9rem; }
 
         .tabs { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin: 12px 0; }
@@ -216,7 +219,9 @@ class HAPanelNGAlarm extends HTMLElement {
         @media (max-width: 800px) {
           .wrap { max-width: 100%; padding: 0 10px 10px; }
           .content { max-width: 100%; }
-          .head-native { margin: 0 calc(50% - 50vw) 10px; }
+          .head-native { margin: 0 -10px 10px; }
+          .menu-btn { display: inline-flex; }
+          .head-title { margin-left: 8px; }
           .tabs { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; justify-content: stretch; }
           .tab { flex: 1 1 auto; }
           .btn-save { min-width: 156px; }
