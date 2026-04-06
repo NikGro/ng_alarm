@@ -312,18 +312,35 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                     s.async_write_ha_state()
 
     async def _async_log_event(self, event_type: str, message: str, **meta: Any) -> None:
+        zone = self._zone_id or "main"
+        sensors = meta.get("sensors")
+        sensor_list = [str(v) for v in sensors] if isinstance(sensors, list) else []
+        if not sensor_list and self._triggered_sensor not in {None, "", UNKNOWN}:
+            sensor_list = [str(self._triggered_sensor)]
+        sensor_name_list: list[str] = []
+        for eid in sensor_list:
+            st = self.hass.states.get(eid)
+            sensor_name_list.append(st.attributes.get("friendly_name", eid) if st else eid)
+
+        cause_user = str(meta.get("cause_user", meta.get("by", self._last_actor)) or "").strip() or "N/A"
+        cause_sensor = ", ".join(sensor_list) if sensor_list else "N/A"
+        cause_sensor_name = ", ".join(sensor_name_list) if sensor_name_list else "N/A"
+
         entry = {
             "ts": int(time.time()),
             "event": event_type,
             "message": message,
-            "state": _state_str(self._alarm_state),
-            "mode": _state_str(self._armed_mode) if self._armed_mode else UNKNOWN,
-            "zone": self._zone_id or "main",
-            "arm_type": self._current_arm_type,
-            "actor": self._last_actor,
-            "from_state": meta.get("from_state", UNKNOWN),
+            "zone": zone,
+            "zones": [zone],
+            "from_state": meta.get("from_state", "N/A"),
             "to_state": meta.get("to_state", _state_str(self._alarm_state)),
-            "by": meta.get("by", self._last_actor),
+            "cause_user": cause_user,
+            "cause_sensor": cause_sensor,
+            "cause_sensor_name": cause_sensor_name,
+            "pending_seconds": int(meta.get("pending_seconds") or 0),
+            # Legacy aliases (kept for compatibility)
+            "by": cause_user,
+            "actor": cause_user,
         }
         entry.update({k: v for k, v in meta.items() if v is not None})
         self._event_log.append(entry)
@@ -511,19 +528,21 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             )
 
         variables = {
+            "zone": self._zone_id or "main",
+            "zones": [self._zone_id or "main"],
+            "arm_type": through_mode,
+            "from_state": from_state,
+            "to_state": to_state,
+            "pending_seconds": int(pending_seconds or 0),
+            "cause_user": (str(self._last_actor or "").strip() or "N/A"),
+            "cause_sensor": ", ".join(blocking_sensors) if blocking_sensors else (self._triggered_sensor if self._triggered_sensor not in {None, "", UNKNOWN} else "N/A"),
+            "cause_sensor_name": ", ".join(blocking_sensor_names) if blocking_sensor_names else (self._triggered_sensor_name if self._triggered_sensor_name not in {None, "", UNKNOWN} else "N/A"),
+            # Legacy aliases
             ATTR_TRIGGERED_SENSOR: self._triggered_sensor,
             ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
             ATTR_ALARM_MODE: through_state,
             ATTR_ALARM_STATE: alarm_state,
             ATTR_ACTOR: self._last_actor,
-            "zone": self._zone_id or "main",
-            "arm_type": through_mode,
-            "from_state": from_state,
-            "to_state": to_state,
-            "pending_seconds": int(pending_seconds or 0),
-            "blocking_sensors": blocking_sensors,
-            "blocking_sensor_names": blocking_sensor_names,
-            "blocking_sensors_text": ", ".join(blocking_sensor_names),
         }
         for action in self._config.get(CONF_ACTIONS, []):
             if not isinstance(action, dict):
@@ -564,14 +583,21 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     async def _async_run_scripts(self, key: str, alarm_state: str, pending_seconds: int | None = None) -> None:
         variables = {
+            "zone": self._zone_id or "main",
+            "zones": [self._zone_id or "main"],
+            "arm_type": self._current_arm_type,
+            "pending_seconds": int(pending_seconds or 0),
+            "from_state": "N/A",
+            "to_state": alarm_state,
+            "cause_user": (str(self._last_actor or "").strip() or "N/A"),
+            "cause_sensor": self._triggered_sensor if self._triggered_sensor not in {None, "", UNKNOWN} else "N/A",
+            "cause_sensor_name": self._triggered_sensor_name if self._triggered_sensor_name not in {None, "", UNKNOWN} else "N/A",
+            # Legacy aliases
             ATTR_TRIGGERED_SENSOR: self._triggered_sensor,
             ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
             ATTR_ALARM_MODE: self._current_mode_id if self._current_mode_id != UNKNOWN else (_state_str(self._armed_mode) if self._armed_mode else UNKNOWN),
             ATTR_ALARM_STATE: alarm_state,
             ATTR_ACTOR: self._last_actor,
-            "zone": self._zone_id or "main",
-            "arm_type": self._current_arm_type,
-            "pending_seconds": int(pending_seconds or 0),
         }
         for entity_id in self._config.get(key, []):
             await self.hass.services.async_call(

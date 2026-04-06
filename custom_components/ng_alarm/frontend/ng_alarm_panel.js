@@ -295,7 +295,7 @@ class HAPanelNGAlarm extends HTMLElement {
             <div id="actions-list" class="list"></div>
             <button id="actions-add" class="btn" type="button">${this._t("+ Add action", "+ Aktion hinzufügen")}</button>
             <div class="muted card-subtitle" style="margin-top:10px">
-              Script/target variables available: <code>from_state</code>, <code>to_state</code>, <code>alarm_mode</code>, <code>zone</code>, <code>arm_type</code>, <code>actor</code>, <code>triggered_sensor</code>, <code>triggered_sensor_name</code>.
+              ${this._t("Variables available", "Verfügbare Variablen")}: <code>zone</code>, <code>zones</code>, <code>from_state</code>, <code>to_state</code>, <code>cause_user</code>, <code>cause_sensor</code>, <code>cause_sensor_name</code>, <code>pending_seconds</code>.
             </div>
           </ha-card>
         </div>
@@ -1287,20 +1287,24 @@ class HAPanelNGAlarm extends HTMLElement {
         ? (action.through.find((z) => z && z !== "any") || action.through[0] || "main")
         : "main";
       const variables = {
+        zone: testZone,
+        zones: [testZone],
         from_state: "disarmed",
         to_state: "triggered",
-        alarm_state: "triggered",
-        alarm_mode: testZone,
-        zone: testZone,
-        arm_type: (action.through_mode || ["away"])[0] || "away",
-        actor: "test_user",
-        by: "test_user",
-        triggered_sensor: "binary_sensor.test_sensor",
-        triggered_sensor_name: "Test Sensor",
+        cause_user: "UI (test_user)",
+        cause_sensor: "binary_sensor.test_sensor",
+        cause_sensor_name: "Test Sensor",
         pending_seconds: 30,
         blocking_sensors: ["binary_sensor.test_window", "binary_sensor.test_door"],
         blocking_sensor_names: ["Test Window", "Test Door"],
         blocking_sensors_text: "Test Window, Test Door",
+        // legacy aliases
+        alarm_state: "triggered",
+        alarm_mode: testZone,
+        actor: "test_user",
+        by: "test_user",
+        triggered_sensor: "binary_sensor.test_sensor",
+        triggered_sensor_name: "Test Sensor",
       };
       for (const entityId of targets) {
         const [domain] = String(entityId || "").split(".", 1);
@@ -1432,7 +1436,9 @@ class HAPanelNGAlarm extends HTMLElement {
         item.className = "item";
         const ts = fmt.format(new Date((ev.ts || 0) * 1000));
         const z = this._zoneDisplayLabel(ev.zone || "main");
-        item.innerHTML = `<strong>[${z}] ${ev.event || "event"}</strong> • ${ts}<br/>${ev.message || ""}<br/><span class="muted">from=${ev.from_state || ""} to=${ev.to_state || ""} by=${ev.by || ev.actor || ""}</span>`;
+        const causeUser = ev.cause_user || ev.by || ev.actor || "N/A";
+        const causeSensor = ev.cause_sensor || "N/A";
+        item.innerHTML = `<strong>[${z}] ${ev.event || "event"}</strong> • ${ts}<br/>${ev.message || ""}<br/><span class="muted">from=${ev.from_state || "N/A"} to=${ev.to_state || "N/A"} cause_user=${causeUser} cause_sensor=${causeSensor} pending_seconds=${ev.pending_seconds ?? 0}</span>`;
         host.appendChild(item);
       });
     } catch (err) {
