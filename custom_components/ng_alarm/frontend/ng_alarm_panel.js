@@ -1191,9 +1191,14 @@ class HAPanelNGAlarm extends HTMLElement {
       const selectedFrom = (action.from || ["any"])[0] || "any";
       const toOptions = this._actionToOptions(selectedFrom, stateOptions);
 
+      const nameSel = this._sel({ text: {} }, action.name || "", (v) => upd({ name: v }), "Action name");
+      const iconSel = this._sel({ icon: {} }, action.icon || "mdi:script-text-outline", (v) => upd({ icon: v }), "Icon");
+      nameSel.style.marginBottom = "-2px";
+      iconSel.style.marginTop = "-2px";
+
       row.append(
-        this._sel({ text: {} }, action.name || "", (v) => upd({ name: v }), "Action name"),
-        this._sel({ icon: {} }, action.icon || "mdi:script-text-outline", (v) => upd({ icon: v }), "Icon"),
+        nameSel,
+        iconSel,
         this._sel(
           { select: { multiple: true, mode: "dropdown", options: throughZoneOptions } },
           selectedZones,
@@ -1219,6 +1224,12 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ select: { mode: "dropdown", options: toOptions } }, (action.to || ["any"])[0] || "any", (v) => upd({ to: [v || "any"] }), this._t("To state", "Zu Zustand")),
         this._sel({ select: { mode: "dropdown", options: userOptions } }, action.by_user || "any_actor", (v) => upd({ by_user: v || "any_actor" }), "By"),
       );
+
+      const topSep = document.createElement("hr");
+      topSep.className = "sep";
+      topSep.style.marginTop = "4px";
+      row.insertBefore(topSep, row.children[2] || null);
+
       if (stateReduced) {
         const warn = document.createElement("div");
         warn.className = "muted";
