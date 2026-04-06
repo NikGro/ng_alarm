@@ -397,7 +397,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("users-add").addEventListener("click", () => {
       const users = [...(this._data.users || [])];
-      users.push({ name: "", code: "", can_arm: true, can_arm_override: false, can_disarm: true, ha_user_ids: [], arm_modes: [], disarm_modes: [] });
+      users.push({ name: "", code: "", can_arm_override: false, ha_user_ids: [], arm_modes: [], disarm_modes: [] });
       this._data.users = users;
       this._renderUsers();
       this._scheduleAutosave();
@@ -613,6 +613,11 @@ class HAPanelNGAlarm extends HTMLElement {
     (this._data.modes || []).forEach((mode, idx) => {
       const item = document.createElement("div");
       item.className = "item";
+      this._bindSimpleDnD(item, idx, host, "modes", () => {
+        this._renderModes();
+        this._renderSensors();
+        this._renderActions();
+      });
       const details = document.createElement("details");
       const zoneKey = (mode.id || `zone_${idx}`).toString();
       details.open = Object.prototype.hasOwnProperty.call(this._openZoneDetails, zoneKey)
@@ -732,6 +737,10 @@ class HAPanelNGAlarm extends HTMLElement {
     (this._data.global_bypass_rules || []).forEach((rule, idx) => {
       const item = document.createElement("div");
       item.className = "item";
+      this._bindSimpleDnD(item, idx, host, "global_bypass_rules", () => {
+        this._renderGlobalBypass();
+        this._renderSensors();
+      });
       const details = document.createElement("details");
       const key = (rule.id || `global_${idx}`).toString();
       details.open = Object.prototype.hasOwnProperty.call(this._openGlobalBypassDetails, key)
@@ -1117,6 +1126,10 @@ class HAPanelNGAlarm extends HTMLElement {
     (this._data.users || []).forEach((u, idx) => {
       const item = document.createElement("div");
       item.className = "item";
+      this._bindSimpleDnD(item, idx, host, "users", () => {
+        this._renderUsers();
+        this._renderActions();
+      });
       const details = document.createElement("details");
       details.open = !u.name;
       const summary = document.createElement("summary");
@@ -1149,8 +1162,15 @@ class HAPanelNGAlarm extends HTMLElement {
       row.append(
         this._sel({ text: {} }, u.name || "", (v) => upd({ name: v }), "Name"),
         this._sel({ text: { type: "password" } }, u.code || "", (v) => upd({ code: v }), "Code"),
-        this._sel({ boolean: {} }, !!u.can_arm, (v) => upd({ can_arm: !!v }), "Can arm"),
-        this._sel({ boolean: {} }, !!u.can_arm_override, (v) => upd({ can_arm_override: !!v }), this._t("Can arm with override", "Kann mit Override scharf schalten")),
+      );
+
+      const sep0 = document.createElement("hr");
+      sep0.className = "sep";
+      sep0.style.marginTop = "6px";
+      sep0.style.marginBottom = "2px";
+      row.append(sep0);
+
+      row.append(
         this._sel(
           { select: { multiple: true, mode: "dropdown", options: haUserOptions } },
           Array.isArray(u.ha_user_ids) ? u.ha_user_ids : [],
@@ -1168,7 +1188,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
       row.append(
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.arm_modes || [], (v) => upd({ arm_modes: v || [] }), "Arm modes"),
-        this._sel({ boolean: {} }, !!u.can_disarm, (v) => upd({ can_disarm: !!v }), "Can disarm"),
+        this._sel({ boolean: {} }, !!u.can_arm_override, (v) => upd({ can_arm_override: !!v }), this._t("Can arm with override", "Kann mit Override scharf schalten")),
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.disarm_modes || [], (v) => upd({ disarm_modes: v || [] }), "Disarm modes"),
       );
 
@@ -1211,6 +1231,9 @@ class HAPanelNGAlarm extends HTMLElement {
     (this._data.actions || []).forEach((action, idx) => {
       const item = document.createElement("div");
       item.className = "item";
+      this._bindSimpleDnD(item, idx, host, "actions", () => {
+        this._renderActions();
+      });
       const details = document.createElement("details");
       details.open = !action.name;
       const summary = document.createElement("summary");
@@ -1586,6 +1609,46 @@ class HAPanelNGAlarm extends HTMLElement {
     s.classList.remove("status-ok", "status-error");
     if (level === "ok") s.classList.add("status-ok");
     if (level === "error") s.classList.add("status-error");
+  }
+
+  _bindSimpleDnD(item, idx, host, key, rerender) {
+    item.draggable = true;
+    item.dataset.index = String(idx);
+    item.addEventListener("dragstart", (ev) => {
+      ev.dataTransfer.effectAllowed = "move";
+      ev.dataTransfer.setData("text/plain", String(idx));
+    });
+    item.addEventListener("dragover", (ev) => {
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = "move";
+      const rect = item.getBoundingClientRect();
+      const before = ev.clientY < rect.top + rect.height / 2;
+      host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
+      item.classList.add(before ? "drag-over-before" : "drag-over-after");
+    });
+    item.addEventListener("dragleave", () => {
+      item.classList.remove("drag-over-before", "drag-over-after");
+    });
+    item.addEventListener("drop", (ev) => {
+      ev.preventDefault();
+      const from = Number(ev.dataTransfer.getData("text/plain"));
+      const to = Number(item.dataset.index);
+      if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
+      const rect = item.getBoundingClientRect();
+      const before = ev.clientY < rect.top + rect.height / 2;
+      const arr = [...(this._data[key] || [])];
+      const [moved] = arr.splice(from, 1);
+      let insertAt = to;
+      if (!before) insertAt = to + (from < to ? 0 : 1);
+      else insertAt = to + (from < to ? -1 : 0);
+      if (insertAt < 0) insertAt = 0;
+      if (insertAt > arr.length) insertAt = arr.length;
+      arr.splice(insertAt, 0, moved);
+      this._data[key] = arr;
+      host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
+      rerender();
+      this._scheduleAutosave();
+    });
   }
 }
 

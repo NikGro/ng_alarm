@@ -419,15 +419,22 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         return False
 
     def _user_can_arm_mode(self, user: dict[str, Any], mode_id: str) -> bool:
-        if not bool(user.get(CONF_USER_CAN_ARM, False)):
-            return False
         allowed_raw = [str(v).strip().lower() for v in user.get(CONF_USER_ARM_MODES, []) if str(v).strip()]
+        # UI rule: no arm mode selection means no arm permission.
         if not allowed_raw:
-            return True
+            return False
         allowed_zone = {_normalize_mode_id(v.split(":", 1)[0]) for v in allowed_raw}
         allowed_pairs = set(allowed_raw)
         current_pair = f"{mode_id}:{self._current_arm_type}"
         return mode_id in allowed_zone or current_pair in allowed_pairs
+
+    def _user_can_disarm_mode(self, user: dict[str, Any], mode_id: str) -> bool:
+        allowed_raw = [str(v).strip().lower() for v in user.get(CONF_USER_DISARM_MODES, []) if str(v).strip()]
+        # UI rule: no disarm mode selection means no disarm permission.
+        if not allowed_raw:
+            return False
+        allowed_zone = {_normalize_mode_id(v.split(":", 1)[0]) for v in allowed_raw}
+        return _normalize_mode_id(mode_id) in allowed_zone
 
     def _with_users(self) -> bool:
         return bool(self._config.get(CONF_USERS))
@@ -1155,7 +1162,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if not require_code:
             if self._with_users() and code:
                 user = self._resolve_user_from_code(code)
-                if user and bool(user.get(CONF_USER_CAN_DISARM, False)):
+                if user and self._user_can_disarm_mode(user, self._current_mode_id):
                     actor = self._actor_name(user)
             self._last_actor = actor
         elif self._with_users():
@@ -1164,17 +1171,9 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 await self._async_log_event("denied", "Denied disarm: unknown user code")
                 return
             actor = self._actor_name(user)
-            if not bool(user.get(CONF_USER_CAN_DISARM, False)):
+            if not self._user_can_disarm_mode(user, self._current_mode_id):
                 await self._async_log_event("denied", "Denied disarm: missing disarm permission")
                 return
-            allowed_raw = [str(v).strip().lower() for v in user.get(CONF_USER_DISARM_MODES, []) if str(v).strip()]
-            if allowed_raw and self._current_mode_id != UNKNOWN:
-                allowed_zone = {_normalize_mode_id(v.split(":", 1)[0]) for v in allowed_raw}
-                allowed_pairs = set(allowed_raw)
-                current_pair = f"{self._current_mode_id}:{self._current_arm_type}"
-                if self._current_mode_id not in allowed_zone and current_pair not in allowed_pairs:
-                    await self._async_log_event("denied", "Denied disarm: mode not allowed for user")
-                    return
         else:
             await self._async_log_event("denied", "Denied disarm: no users configured")
             return
