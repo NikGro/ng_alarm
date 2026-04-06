@@ -65,6 +65,7 @@ class NGAlarmEventLogSensor(SensorEntity):
             return "no_events"
         last = events[-1]
         zone = str(last.get("zone") or self._zone)
+        zone_id = str(last.get("zone_id") or self._zone)
         from_state = str(last.get("from_state") or "unknown")
         to_state = str(last.get("to_state") or str(last.get("state") or "unknown"))
         by_actor = str(last.get("cause_user") or last.get("by") or last.get("actor") or "N/A")
@@ -81,8 +82,10 @@ class NGAlarmEventLogSensor(SensorEntity):
         by_actor = str(last.get("cause_user") or last.get("by") or last.get("actor") or "N/A")
         return {
             "zone": zone,
+            "zone_id": zone_id,
             "event_count": len(events),
             "last_event": last.get("event"),
+            "message": last.get("message", ""),
             "cause_user": by_actor,
             "cause_sensor": last.get("cause_sensor", "N/A"),
             "cause_sensor_name": last.get("cause_sensor_name", "N/A"),

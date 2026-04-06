@@ -298,7 +298,7 @@ class HAPanelNGAlarm extends HTMLElement {
             <div id="actions-list" class="list"></div>
             <button id="actions-add" class="btn" type="button">${this._t("+ Add action", "+ Aktion hinzufügen")}</button>
             <div class="muted card-subtitle" style="margin-top:10px">
-              ${this._t("Variables available", "Verfügbare Variablen")}: <code>zone</code>, <code>from_state</code>, <code>to_state</code>, <code>arm_type</code>, <code>cause_user</code>, <code>cause_sensor</code>, <code>cause_sensor_name</code>, <code>pending_seconds</code>.
+              ${this._t("Variables available", "Verfügbare Variablen")}: <code>zone</code>, <code>zone_id</code>, <code>from_state</code>, <code>to_state</code>, <code>arm_type</code>, <code>cause_user</code>, <code>cause_sensor</code>, <code>cause_sensor_name</code>, <code>pending_seconds</code>.
             </div>
           </ha-card>
         </div>
@@ -604,6 +604,7 @@ class HAPanelNGAlarm extends HTMLElement {
         (v) => {
           upd({ require_second_arm_for_override: !!v });
           this._renderGeneral();
+          this._renderActions();
         },
         this._t("Second arming required for force-arm", "Zweites Scharfschalten für Force-Arm erforderlich")
       ),
@@ -1442,6 +1443,7 @@ class HAPanelNGAlarm extends HTMLElement {
         zone: Array.isArray(action.through) && action.through.length
           ? action.through.filter((z) => z && z !== "any").join(", ") || "main"
           : testZone,
+        zone_id: testZone,
         from_state: "disarmed",
         to_state: "triggered",
         arm_type: "away",

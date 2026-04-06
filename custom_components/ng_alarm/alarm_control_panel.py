@@ -318,6 +318,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._override_confirm_mode_id = str(saved.get("override_confirm_mode_id", UNKNOWN) or UNKNOWN)
             self._override_confirm_arm_type = str(saved.get("override_confirm_arm_type", UNKNOWN) or UNKNOWN)
             self._override_confirm_sensors = [str(v) for v in (saved.get("override_confirm_sensors") or []) if str(v).strip()]
+            self._last_event_ts = int(saved.get("last_event_ts") or 0)
             self._event_log = list(saved.get("event_log", []))[-200:]
 
         await self._async_bind_bypass_listener()
@@ -362,6 +363,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 "override_confirm_mode_id": self._override_confirm_mode_id,
                 "override_confirm_arm_type": self._override_confirm_arm_type,
                 "override_confirm_sensors": self._override_confirm_sensors,
+                "last_event_ts": self._last_event_ts,
                 "event_log": self._event_log[-200:],
             }
         )
