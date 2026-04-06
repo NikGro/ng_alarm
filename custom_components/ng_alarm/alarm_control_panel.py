@@ -14,6 +14,7 @@ from homeassistant.components.alarm_control_panel import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.components import persistent_notification
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.template import Template, TemplateError, result_as_boolean
@@ -58,9 +59,11 @@ from .const import (
     CONF_MODES,
     CONF_NAME,
     CONF_PENDING_SCRIPTS,
+    CONF_OVERRIDE_REQUIRED_PERSISTENT_NOTICE,
     CONF_REQUIRE_CODE_TO_ARM,
     CONF_REQUIRE_CODE_TO_DISARM,
     CONF_REQUIRE_CODE_TO_MODE_CHANGE,
+    CONF_REQUIRE_SECOND_ARM_FOR_OVERRIDE,
     CONF_SENSOR_BYPASS_GLOBAL_IDS,
     CONF_SENSOR_RULES,
     CONF_SENSOR_TRIGGER_ON_OPEN_ONLY,
@@ -214,6 +217,30 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             _normalize_mode_id(mode_id) == _normalize_mode_id(self._override_confirm_mode_id)
             and str(arm_type or UNKNOWN).strip().lower()
             == str(self._override_confirm_arm_type or UNKNOWN).strip().lower()
+        )
+
+    def _require_second_override_arm(self) -> bool:
+        return bool(self._config.get(CONF_REQUIRE_SECOND_ARM_FOR_OVERRIDE, True))
+
+    async def _async_override_required_notice(self, blocking: list[str]) -> None:
+        if not bool(self._config.get(CONF_OVERRIDE_REQUIRED_PERSISTENT_NOTICE, True)):
+            return
+        names: list[str] = []
+        for eid in blocking:
+            st = self.hass.states.get(eid)
+            names.append(st.attributes.get("friendly_name", eid) if st else eid)
+        de = str(self.hass.config.language or "").lower().startswith("de")
+        title = "Force-Arm Bestätigung erforderlich" if de else "Force-arm confirmation required"
+        msg = (
+            "Es sind Sensoren offen: " + ", ".join(names) + ". Bitte erneut scharf schalten, um Override zu bestätigen."
+            if de
+            else "Open sensors: " + ", ".join(names) + ". Arm again to confirm override."
+        )
+        persistent_notification.async_create(
+            self.hass,
+            msg,
+            title=title,
+            notification_id=f"{DOMAIN}_override_required_{self._zone_id or 'main'}",
         )
 
     @property
@@ -1075,7 +1102,17 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
         if blocking:
             if self._arm_override_requested:
-                if self._is_override_confirmation_valid(self._current_mode_id, self._current_arm_type):
+                if not self._require_second_override_arm():
+                    await self._async_log_event(
+                        "arm_override_confirmed",
+                        "Arming override confirmed",
+                        from_state=prev,
+                        to_state="arming" if delay > 0 else _state_str(mode),
+                        by=self._last_actor,
+                        sensors=blocking,
+                    )
+                    self._clear_override_confirmation()
+                elif self._is_override_confirmation_valid(self._current_mode_id, self._current_arm_type):
                     await self._async_log_event(
                         "arm_override_confirmed",
                         "Arming override confirmed",
@@ -1103,6 +1140,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                         pending_seconds=self._override_window(),
                         blocking_sensors=blocking,
                     )
+                    await self._async_override_required_notice(blocking)
                     return
             else:
                 self._clear_override_confirmation()

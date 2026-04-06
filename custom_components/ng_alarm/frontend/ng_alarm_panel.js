@@ -543,15 +543,15 @@ class HAPanelNGAlarm extends HTMLElement {
     }
 
     const opts = [
-      { value: "any", label: this._t("Any", "Beliebig") },
-      { value: "disarmed", label: this._t("Disarmed", "Unscharf") },
-      { value: "arming", label: this._t("Arming", "Scharfschalten") },
-      { value: "pending", label: this._t("Pending", "Auslöseverzögerung") },
-      { value: "triggered", label: this._t("Triggered", "Ausgelöst") },
-      { value: "arm_blocked", label: this._t("Arm blocked", "Scharfschalten blockiert") },
+      { value: "any", label: this._t("Any — all transitions", "Beliebig — alle Übergänge") },
+      { value: "disarmed", label: this._t("Disarmed — alarm off", "Unscharf — Alarm aus") },
+      { value: "arming", label: this._t("Arming — exit delay running", "Scharfschalten — Exit-Delay läuft") },
+      { value: "pending", label: this._t("Pending — entry delay running", "Auslöseverzögerung — Entry-Delay läuft") },
+      { value: "triggered", label: this._t("Triggered — alarm active", "Ausgelöst — Alarm aktiv") },
+      { value: "arm_blocked", label: this._t("Arm blocked — open sensors", "Scharfschalten blockiert — offene Sensoren") },
     ];
 
-    opts.splice(1, 0, { value: "any_armed", label: this._t("Any armed state", "Beliebiger Scharf-Zustand") });
+    opts.splice(1, 0, { value: "any_armed", label: this._t("Any armed state — all armed_*", "Beliebiger Scharf-Zustand — alle armed_*") });
 
     const anyZoneText = this._t("in any zone", "in beliebiger Zone");
     Array.from(armTypes).forEach((t) => {
@@ -597,12 +597,49 @@ class HAPanelNGAlarm extends HTMLElement {
         this._t("Code input mode", "Code-Eingabemodus")
       ),
       this._sel(
+        { boolean: {} },
+        this._data.require_second_arm_for_override !== false,
+        (v) => {
+          upd({ require_second_arm_for_override: !!v });
+          this._renderGeneral();
+        },
+        this._t("Second arming required for force-arm", "Zweites Scharfschalten für Force-Arm erforderlich")
+      ),
+      this._sel(
+        { boolean: {} },
+        this._data.override_required_persistent_notice !== false,
+        (v) => upd({ override_required_persistent_notice: !!v }),
+        this._t("Default override-required notice", "Standardhinweis bei erforderlichem Override")
+      ),
+    );
+
+    const helper = document.createElement("div");
+    helper.className = "muted";
+    helper.style.marginTop = "2px";
+    helper.textContent = this._t(
+      "When enabled, users with force permission must arm twice within the configured time window.",
+      "Wenn aktiv, müssen Benutzer mit Force-Recht innerhalb des Zeitfensters zweimal scharf schalten."
+    );
+    host.append(helper);
+
+    if (this._data.require_second_arm_for_override !== false) {
+      host.append(
+      this._sel(
         { number: { min: 5, max: 120, step: 1, mode: "box", unit_of_measurement: "s" } },
         Number(this._data.arm_override_confirm_window ?? 20),
         (v) => upd({ arm_override_confirm_window: Math.max(5, Number(v || 20)) }),
         this._t("Force-arm confirm window", "Force-Arm Bestätigungsfenster")
       ),
-    );
+      );
+      const helper2 = document.createElement("div");
+      helper2.className = "muted";
+      helper2.style.marginTop = "-2px";
+      helper2.textContent = this._t(
+        "Time in seconds for the second force-arm confirmation.",
+        "Zeitfenster in Sekunden für die zweite Force-Arm-Bestätigung."
+      );
+      host.append(helper2);
+    }
   }
 
   _renderModes() {
@@ -1217,6 +1254,27 @@ class HAPanelNGAlarm extends HTMLElement {
     if (!host) return;
     host.innerHTML = "";
 
+    const systemItem = document.createElement("div");
+    systemItem.className = "item";
+    const sysRow = document.createElement("div");
+    sysRow.className = "row";
+    sysRow.append(
+      this._sel(
+        { boolean: {} },
+        this._data.override_required_persistent_notice !== false,
+        (v) => { this._data.override_required_persistent_notice = !!v; this._scheduleAutosave(); },
+        this._t("Default persistent notice for force-arm confirmation", "Standard-Persistent-Notification bei Force-Arm-Bestätigung")
+      )
+    );
+    const sysHint = document.createElement("div");
+    sysHint.className = "muted";
+    sysHint.textContent = this._t(
+      "This built-in notification cannot be deleted here, only enabled/disabled.",
+      "Diese eingebaute Benachrichtigung kann hier nicht gelöscht, nur aktiviert/deaktiviert werden."
+    );
+    systemItem.append(sysRow, sysHint);
+    host.appendChild(systemItem);
+
     const throughZoneOptions = [{ value: "any", label: this._t("Any zone", "Beliebige Zone") }, ...this._modeOptions()];
     const userOptions = [
       { value: "any_actor", label: this._t("Any User / Any Sensor", "Beliebiger Benutzer / Beliebiger Sensor") },
@@ -1403,6 +1461,8 @@ class HAPanelNGAlarm extends HTMLElement {
         require_code_to_disarm: true,
         code_input_mode: "pin",
         arm_override_confirm_window: 20,
+        require_second_arm_for_override: true,
+        override_required_persistent_notice: true,
         expose_event_log_sensor: false,
         modes: [],
         global_bypass_rules: [],

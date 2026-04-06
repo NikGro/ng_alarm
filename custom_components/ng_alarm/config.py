@@ -16,6 +16,7 @@ from .const import (
     CONF_ACTION_ICON,
     CONF_ARM_OVERRIDE_CONFIRM_WINDOW,
     CONF_CODE_INPUT_MODE,
+    CONF_OVERRIDE_REQUIRED_PERSISTENT_NOTICE,
     CONF_ACTION_SCRIPTS,
     CONF_ACTION_TARGETS,
     CONF_ACTION_THROUGH,
@@ -35,6 +36,7 @@ from .const import (
     CONF_REQUIRE_CODE_TO_ARM,
     CONF_REQUIRE_CODE_TO_DISARM,
     CONF_REQUIRE_CODE_TO_MODE_CHANGE,
+    CONF_REQUIRE_SECOND_ARM_FOR_OVERRIDE,
     CONF_SENSOR_BYPASS_GLOBAL_IDS,
     CONF_SENSOR_RULES,
     CONF_SENSOR_TRIGGER_ON_OPEN_ONLY,
@@ -99,6 +101,12 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     )
     data[CONF_ARM_OVERRIDE_CONFIRM_WINDOW] = max(
         5, int(data.get(CONF_ARM_OVERRIDE_CONFIRM_WINDOW, 20) or 20)
+    )
+    data[CONF_REQUIRE_SECOND_ARM_FOR_OVERRIDE] = bool(
+        data.get(CONF_REQUIRE_SECOND_ARM_FOR_OVERRIDE, True)
+    )
+    data[CONF_OVERRIDE_REQUIRED_PERSISTENT_NOTICE] = bool(
+        data.get(CONF_OVERRIDE_REQUIRED_PERSISTENT_NOTICE, True)
     )
     mode = str(data.get(CONF_CODE_INPUT_MODE, "pin") or "pin").strip().lower()
     data[CONF_CODE_INPUT_MODE] = mode if mode in {"pin", "password"} else "pin"
