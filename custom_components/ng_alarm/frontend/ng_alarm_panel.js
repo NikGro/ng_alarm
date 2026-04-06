@@ -495,8 +495,9 @@ class HAPanelNGAlarm extends HTMLElement {
     return `${zoneName} (${map[String(armType).toLowerCase()] || armType})`;
   }
 
-  _actionStateOptionsForZone(zoneId) {
-    const anyZone = !zoneId || zoneId === "any";
+  _actionStateOptionsForZones(zoneIds) {
+    const selected = Array.isArray(zoneIds) && zoneIds.length ? zoneIds : ["any"];
+    const anyZone = selected.includes("any");
     const modeMap = {
       away: { value: "armed_away", en: "Armed Away", de: "Scharf Abwesend" },
       home: { value: "armed_home", en: "Armed Home", de: "Scharf Zuhause" },
@@ -505,6 +506,7 @@ class HAPanelNGAlarm extends HTMLElement {
     };
 
     let armTypes = new Set();
+    let reduced = false;
     if (anyZone) {
       (this._data.modes || []).forEach((z) => {
         const types = Array.isArray(z.arm_types) && z.arm_types.length ? z.arm_types : [z.arm_target || "away"];
@@ -512,9 +514,20 @@ class HAPanelNGAlarm extends HTMLElement {
       });
       if (!armTypes.size) armTypes = new Set(["away", "home"]);
     } else {
-      const z = (this._data.modes || []).find((m) => String(m.id || "") === String(zoneId));
-      const types = z ? (Array.isArray(z.arm_types) && z.arm_types.length ? z.arm_types : [z.arm_target || "away"]) : [];
-      types.forEach((t) => armTypes.add(String(t || "").toLowerCase()));
+      const zoneSets = selected.map((id) => {
+        const z = (this._data.modes || []).find((m) => String(m.id || "") === String(id));
+        const types = z ? (Array.isArray(z.arm_types) && z.arm_types.length ? z.arm_types : [z.arm_target || "away"]) : ["away"];
+        return new Set(types.map((t) => String(t || "").toLowerCase()));
+      });
+      if (zoneSets.length) {
+        armTypes = new Set(zoneSets[0]);
+        zoneSets.slice(1).forEach((s) => {
+          armTypes = new Set([...armTypes].filter((x) => s.has(x)));
+        });
+        const union = new Set();
+        zoneSets.forEach((s) => [...s].forEach((x) => union.add(x)));
+        reduced = armTypes.size < union.size;
+      }
       if (!armTypes.size) armTypes = new Set(["away"]);
     }
 
@@ -527,6 +540,8 @@ class HAPanelNGAlarm extends HTMLElement {
       { value: "arm_blocked", label: this._t("Arm blocked", "Scharfschalten blockiert") },
     ];
 
+    opts.splice(1, 0, { value: "any_armed", label: this._t("Any armed state", "Beliebiger Scharf-Zustand") });
+
     const anyZoneText = this._t("in any zone", "in beliebiger Zone");
     Array.from(armTypes).forEach((t) => {
       const meta = modeMap[t];
@@ -537,7 +552,7 @@ class HAPanelNGAlarm extends HTMLElement {
       opts.splice(3, 0, { value: meta.value, label });
     });
 
-    return opts;
+    return { options: opts, reduced };
   }
 
   _actionToOptions(fromState, options) {
@@ -1161,8 +1176,8 @@ class HAPanelNGAlarm extends HTMLElement {
         summary.innerHTML = `<ha-icon icon="${a.icon || "mdi:script-text-outline"}"></ha-icon> ${a.name || `Action #${idx + 1}`}`;
       };
 
-      const selectedZone = (action.through || ["any"])[0] || "any";
-      const stateOptions = this._actionStateOptionsForZone(selectedZone);
+      const selectedZones = Array.isArray(action.through) && action.through.length ? action.through : ["any"];
+      const { options: stateOptions, reduced: stateReduced } = this._actionStateOptionsForZones(selectedZones);
       const selectedFrom = (action.from || ["any"])[0] || "any";
       const toOptions = this._actionToOptions(selectedFrom, stateOptions);
 
@@ -1170,13 +1185,17 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ text: {} }, action.name || "", (v) => upd({ name: v }), "Action name"),
         this._sel({ icon: {} }, action.icon || "mdi:script-text-outline", (v) => upd({ icon: v }), "Icon"),
         this._sel(
-          { select: { mode: "dropdown", options: throughZoneOptions } },
-          selectedZone,
+          { select: { multiple: true, mode: "dropdown", options: throughZoneOptions } },
+          selectedZones,
           (v) => {
-            upd({ through: [v || "any"], from: ["any"], to: ["any"] });
+            const arr = Array.isArray(v) ? v : [v || "any"];
+            const cleaned = arr.filter(Boolean);
+            const noAny = cleaned.filter((x) => x !== "any");
+            const normalized = cleaned.includes("any") && noAny.length ? noAny : (cleaned.length ? cleaned : ["any"]);
+            upd({ through: normalized, from: ["any"], to: ["any"] });
             this._renderActions();
           },
-          this._t("Zone", "Zone")
+          this._t("Zones", "Zonen")
         ),
         this._sel(
           { select: { mode: "dropdown", options: stateOptions } },
@@ -1190,6 +1209,15 @@ class HAPanelNGAlarm extends HTMLElement {
         this._sel({ select: { mode: "dropdown", options: toOptions } }, (action.to || ["any"])[0] || "any", (v) => upd({ to: [v || "any"] }), this._t("To state", "Zu Zustand")),
         this._sel({ select: { mode: "dropdown", options: userOptions } }, action.by_user || "any_actor", (v) => upd({ by_user: v || "any_actor" }), "By"),
       );
+      if (stateReduced) {
+        const warn = document.createElement("div");
+        warn.className = "muted";
+        warn.textContent = this._t(
+          "State options were reduced because selected zones support different arm states.",
+          "Die Zustandsauswahl wurde eingeschränkt, da gewählte Zonen unterschiedliche Scharfzustände unterstützen."
+        );
+        row.append(warn);
+      }
       const sep = document.createElement("hr");
       sep.className = "sep";
       row.appendChild(sep);
@@ -1245,12 +1273,15 @@ class HAPanelNGAlarm extends HTMLElement {
     try {
       const targets = action.targets || action.scripts || [];
       if (!Array.isArray(targets) || !targets.length) return false;
+      const testZone = Array.isArray(action.through)
+        ? (action.through.find((z) => z && z !== "any") || action.through[0] || "main")
+        : "main";
       const variables = {
         from_state: "disarmed",
         to_state: "triggered",
         alarm_state: "triggered",
-        alarm_mode: (action.through || ["any"])[0] || "any",
-        zone: (action.through || ["main"])[0] || "main",
+        alarm_mode: testZone,
+        zone: testZone,
         arm_type: (action.through_mode || ["away"])[0] || "away",
         actor: "test_user",
         by: "test_user",

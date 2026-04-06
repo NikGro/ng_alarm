@@ -487,7 +487,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         normalized = {str(v).strip().lower() for v in filters if str(v).strip()}
         if not normalized:
             return True
-        return "any" in normalized or str(value).strip().lower() in normalized
+        current = str(value).strip().lower()
+        if "any_armed" in normalized and current.startswith("armed_"):
+            return True
+        return "any" in normalized or current in normalized
 
     async def _async_run_transition_actions(
         self,
