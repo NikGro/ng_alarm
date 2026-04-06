@@ -70,12 +70,13 @@ class HAPanelNGAlarm extends HTMLElement {
           box-sizing:border-box;
           background: var(--primary-background-color);
         }
-        .wrap { padding: 0 12px 12px; max-width: 980px; margin: 0 auto; color: var(--primary-text-color); }
+        .wrap { padding: 0 12px 12px; max-width: none; margin: 0; color: var(--primary-text-color); }
+        .content { max-width: 980px; margin: 0 auto; }
         .head-native {
           display:flex;
           align-items:center;
           min-height: 56px;
-          margin: 0 -12px 10px;
+          margin: 0 calc(50% - 50vw) 10px;
           padding: 0 12px;
           box-sizing: border-box;
           background: var(--app-header-background-color, var(--card-background-color));
@@ -214,7 +215,8 @@ class HAPanelNGAlarm extends HTMLElement {
 
         @media (max-width: 800px) {
           .wrap { max-width: 100%; padding: 0 10px 10px; }
-          .head-native { margin: 0 -10px 10px; }
+          .content { max-width: 100%; }
+          .head-native { margin: 0 calc(50% - 50vw) 10px; }
           .tabs { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; justify-content: stretch; }
           .tab { flex: 1 1 auto; }
           .btn-save { min-width: 156px; }
@@ -230,6 +232,8 @@ class HAPanelNGAlarm extends HTMLElement {
           <div class="head-spacer"></div>
           <div class="head-version" id="header-version">v–</div>
         </div>
+
+        <div class="content">
 
         <div class="tabs">
           <button class="tab" data-tab="general"><ha-icon icon="mdi:cog-outline"></ha-icon>${this._t("General", "Allgemein")}</button>
@@ -310,6 +314,7 @@ class HAPanelNGAlarm extends HTMLElement {
         <div class="footer">
           <button id="save" class="btn primary btn-save">${this._t("Save & Reload", "Speichern & Neu laden")}</button>
           <div class="muted" id="status"></div>
+        </div>
         </div>
       </div>
     `;
