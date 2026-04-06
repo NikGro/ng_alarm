@@ -1250,47 +1250,49 @@ class HAPanelNGAlarm extends HTMLElement {
     if (!host) return;
     host.innerHTML = "";
 
-    const systemItem = document.createElement("div");
-    systemItem.className = "item";
-    const sysDetails = document.createElement("details");
-    sysDetails.open = false;
-    const sysSummary = document.createElement("summary");
-    sysSummary.innerHTML = this._summaryWithHandle(
-      "mdi:bell-outline",
-      this._t("Default notice: force-arm confirmation", "Standardhinweis: Force-Arm-Bestätigung")
-    );
-    const sysHint = document.createElement("div");
-    sysHint.className = "muted";
-    sysHint.style.marginTop = "8px";
-    sysHint.textContent = this._t(
-      "Built-in notice shown when second arming is required. It cannot be deleted, only enabled/disabled.",
-      "Eingebauter Hinweis bei erforderlichem zweitem Scharfschalten. Er kann nicht gelöscht, nur aktiviert/deaktiviert werden."
-    );
-    const sysBtn = document.createElement("button");
-    sysBtn.className = "btn danger";
-    sysBtn.type = "button";
-    const syncSysBtn = () => {
-      const enabled = this._data.override_required_persistent_notice !== false;
-      sysBtn.textContent = enabled
-        ? this._t("Disable notice", "Hinweis deaktivieren")
-        : this._t("Enable notice", "Hinweis aktivieren");
-    };
-    syncSysBtn();
-    sysBtn.addEventListener("click", () => {
-      this._data.override_required_persistent_notice = !(this._data.override_required_persistent_notice !== false);
+    if (this._data.require_second_arm_for_override !== false) {
+      const systemItem = document.createElement("div");
+      systemItem.className = "item";
+      const sysDetails = document.createElement("details");
+      sysDetails.open = false;
+      const sysSummary = document.createElement("summary");
+      sysSummary.innerHTML = this._summaryWithHandle(
+        "mdi:bell-outline",
+        this._t("Default notice: force-arm confirmation", "Standardhinweis: Force-Arm-Bestätigung")
+      );
+      const sysHint = document.createElement("div");
+      sysHint.className = "muted";
+      sysHint.style.marginTop = "8px";
+      sysHint.textContent = this._t(
+        "Built-in notice shown when second arming is required. It cannot be deleted, only enabled/disabled.",
+        "Eingebauter Hinweis bei erforderlichem zweitem Scharfschalten. Er kann nicht gelöscht, nur aktiviert/deaktiviert werden."
+      );
+      const sysBtn = document.createElement("button");
+      sysBtn.className = "btn danger";
+      sysBtn.type = "button";
+      const syncSysBtn = () => {
+        const enabled = this._data.override_required_persistent_notice !== false;
+        sysBtn.textContent = enabled
+          ? this._t("Disable notice", "Hinweis deaktivieren")
+          : this._t("Enable notice", "Hinweis aktivieren");
+      };
       syncSysBtn();
-      this._scheduleAutosave();
-    });
+      sysBtn.addEventListener("click", () => {
+        this._data.override_required_persistent_notice = !(this._data.override_required_persistent_notice !== false);
+        syncSysBtn();
+        this._scheduleAutosave();
+      });
 
-    const sysBox = document.createElement("div");
-    sysBox.className = "sensor-btn-row system-notice-wrap";
-    const sysTop = document.createElement("div");
-    sysTop.className = "sensor-btn-top";
-    sysTop.append(sysBtn);
-    sysBox.append(sysHint, sysTop);
-    sysDetails.append(sysSummary, sysBox);
-    systemItem.appendChild(sysDetails);
-    host.appendChild(systemItem);
+      const sysBox = document.createElement("div");
+      sysBox.className = "sensor-btn-row system-notice-wrap";
+      const sysTop = document.createElement("div");
+      sysTop.className = "sensor-btn-top";
+      sysTop.append(sysBtn);
+      sysBox.append(sysHint, sysTop);
+      sysDetails.append(sysSummary, sysBox);
+      systemItem.appendChild(sysDetails);
+      host.appendChild(systemItem);
+    }
 
     const throughZoneOptions = [{ value: "any", label: this._t("Any zone", "Beliebige Zone") }, ...this._modeOptions()];
     const userOptions = [
