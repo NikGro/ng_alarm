@@ -295,7 +295,7 @@ class HAPanelNGAlarm extends HTMLElement {
             <div id="actions-list" class="list"></div>
             <button id="actions-add" class="btn" type="button">${this._t("+ Add action", "+ Aktion hinzufügen")}</button>
             <div class="muted card-subtitle" style="margin-top:10px">
-              ${this._t("Variables available", "Verfügbare Variablen")}: <code>zone</code>, <code>from_state</code>, <code>to_state</code>, <code>cause_user</code>, <code>cause_sensor</code>, <code>cause_sensor_name</code>, <code>pending_seconds</code>.
+              ${this._t("Variables available", "Verfügbare Variablen")}: <code>zone</code>, <code>from_state</code>, <code>to_state</code>, <code>arm_type</code>, <code>cause_user</code>, <code>cause_sensor</code>, <code>cause_sensor_name</code>, <code>pending_seconds</code>.
             </div>
           </ha-card>
         </div>
@@ -1303,6 +1303,7 @@ class HAPanelNGAlarm extends HTMLElement {
           : testZone,
         from_state: "disarmed",
         to_state: "triggered",
+        arm_type: "away",
         cause_user: "UI (test_user)",
         cause_sensor: "binary_sensor.test_sensor",
         cause_sensor_name: "Test Sensor",
@@ -1310,13 +1311,6 @@ class HAPanelNGAlarm extends HTMLElement {
         blocking_sensors: ["binary_sensor.test_window", "binary_sensor.test_door"],
         blocking_sensor_names: ["Test Window", "Test Door"],
         blocking_sensors_text: "Test Window, Test Door",
-        // legacy aliases
-        alarm_state: "triggered",
-        alarm_mode: testZone,
-        actor: "test_user",
-        by: "test_user",
-        triggered_sensor: "binary_sensor.test_sensor",
-        triggered_sensor_name: "Test Sensor",
       };
       for (const entityId of targets) {
         const [domain] = String(entityId || "").split(".", 1);

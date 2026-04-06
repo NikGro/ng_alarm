@@ -20,7 +20,6 @@ from homeassistant.helpers.template import Template, TemplateError, result_as_bo
 
 from .const import (
     ATTR_ALARM_MODE,
-    ATTR_ALARM_STATE,
     ATTR_ACTOR,
     ATTR_TRIGGERED_SENSOR,
     ATTR_TRIGGERED_SENSOR_NAME,
@@ -341,9 +340,6 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             "cause_sensor": cause_sensor,
             "cause_sensor_name": cause_sensor_name,
             "pending_seconds": int(meta.get("pending_seconds") or 0),
-            # Legacy aliases (kept for compatibility)
-            "by": cause_user,
-            "actor": cause_user,
         }
         entry.update({k: v for k, v in meta.items() if v is not None})
         self._event_log.append(entry)
@@ -539,12 +535,6 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             "cause_user": (str(self._last_actor or "").strip() or "N/A"),
             "cause_sensor": ", ".join(blocking_sensors) if blocking_sensors else (self._triggered_sensor if self._triggered_sensor not in {None, "", UNKNOWN} else "N/A"),
             "cause_sensor_name": ", ".join(blocking_sensor_names) if blocking_sensor_names else (self._triggered_sensor_name if self._triggered_sensor_name not in {None, "", UNKNOWN} else "N/A"),
-            # Legacy aliases
-            ATTR_TRIGGERED_SENSOR: self._triggered_sensor,
-            ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
-            ATTR_ALARM_MODE: through_state,
-            ATTR_ALARM_STATE: alarm_state,
-            ATTR_ACTOR: self._last_actor,
         }
         for action in self._config.get(CONF_ACTIONS, []):
             if not isinstance(action, dict):
@@ -593,12 +583,6 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             "cause_user": (str(self._last_actor or "").strip() or "N/A"),
             "cause_sensor": self._triggered_sensor if self._triggered_sensor not in {None, "", UNKNOWN} else "N/A",
             "cause_sensor_name": self._triggered_sensor_name if self._triggered_sensor_name not in {None, "", UNKNOWN} else "N/A",
-            # Legacy aliases
-            ATTR_TRIGGERED_SENSOR: self._triggered_sensor,
-            ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
-            ATTR_ALARM_MODE: self._current_mode_id if self._current_mode_id != UNKNOWN else (_state_str(self._armed_mode) if self._armed_mode else UNKNOWN),
-            ATTR_ALARM_STATE: alarm_state,
-            ATTR_ACTOR: self._last_actor,
         }
         for entity_id in self._config.get(key, []):
             await self.hass.services.async_call(
