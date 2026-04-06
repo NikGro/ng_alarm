@@ -606,12 +606,6 @@ class HAPanelNGAlarm extends HTMLElement {
         },
         this._t("Second arming required for force-arm", "Zweites Scharfschalten für Force-Arm erforderlich")
       ),
-      this._sel(
-        { boolean: {} },
-        this._data.override_required_persistent_notice !== false,
-        (v) => upd({ override_required_persistent_notice: !!v }),
-        this._t("Default override-required notice", "Standardhinweis bei erforderlichem Override")
-      ),
     );
 
     const helper = document.createElement("div");
@@ -1257,23 +1251,44 @@ class HAPanelNGAlarm extends HTMLElement {
 
     const systemItem = document.createElement("div");
     systemItem.className = "item";
-    const sysRow = document.createElement("div");
-    sysRow.className = "row";
-    sysRow.append(
-      this._sel(
-        { boolean: {} },
-        this._data.override_required_persistent_notice !== false,
-        (v) => { this._data.override_required_persistent_notice = !!v; this._scheduleAutosave(); },
-        this._t("Default persistent notice for force-arm confirmation", "Standard-Persistent-Notification bei Force-Arm-Bestätigung")
-      )
+    const sysDetails = document.createElement("details");
+    sysDetails.open = false;
+    const sysSummary = document.createElement("summary");
+    sysSummary.innerHTML = this._summaryWithHandle(
+      "mdi:bell-outline",
+      this._t("Default notice: force-arm confirmation", "Standardhinweis: Force-Arm-Bestätigung")
     );
     const sysHint = document.createElement("div");
     sysHint.className = "muted";
+    sysHint.style.marginTop = "8px";
     sysHint.textContent = this._t(
-      "This built-in notification cannot be deleted here, only enabled/disabled.",
-      "Diese eingebaute Benachrichtigung kann hier nicht gelöscht, nur aktiviert/deaktiviert werden."
+      "Built-in notice shown when second arming is required. It cannot be deleted, only enabled/disabled.",
+      "Eingebauter Hinweis bei erforderlichem zweitem Scharfschalten. Er kann nicht gelöscht, nur aktiviert/deaktiviert werden."
     );
-    systemItem.append(sysRow, sysHint);
+    const sysBtn = document.createElement("button");
+    sysBtn.className = "btn pill-gray";
+    sysBtn.type = "button";
+    const syncSysBtn = () => {
+      const enabled = this._data.override_required_persistent_notice !== false;
+      sysBtn.textContent = enabled
+        ? this._t("Disable notice", "Hinweis deaktivieren")
+        : this._t("Enable notice", "Hinweis aktivieren");
+    };
+    syncSysBtn();
+    sysBtn.addEventListener("click", () => {
+      this._data.override_required_persistent_notice = !(this._data.override_required_persistent_notice !== false);
+      syncSysBtn();
+      this._scheduleAutosave();
+    });
+
+    const sysBox = document.createElement("div");
+    sysBox.className = "sensor-btn-row";
+    const sysTop = document.createElement("div");
+    sysTop.className = "sensor-btn-top";
+    sysTop.append(sysBtn);
+    sysBox.append(sysHint, sysTop);
+    sysDetails.append(sysSummary, sysBox);
+    systemItem.appendChild(sysDetails);
     host.appendChild(systemItem);
 
     const throughZoneOptions = [{ value: "any", label: this._t("Any zone", "Beliebige Zone") }, ...this._modeOptions()];
