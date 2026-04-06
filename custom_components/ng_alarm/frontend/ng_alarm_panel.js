@@ -13,6 +13,7 @@ class HAPanelNGAlarm extends HTMLElement {
     this._openSensorDetails = {};
     this._sensorConfigClipboard = null;
     this._sensorDropIndicator = null;
+    this._haUsers = [];
     this._autosaveTimer = null;
     this._autosaveInFlight = false;
     this._configLoaded = false;
@@ -1105,6 +1106,14 @@ class HAPanelNGAlarm extends HTMLElement {
     if (!host) return;
     host.innerHTML = "";
 
+    if (!(this._haUsers || []).length) {
+      const hint = document.createElement("div");
+      hint.className = "muted";
+      hint.style.marginBottom = "8px";
+      hint.textContent = this._t("HA user list unavailable in this context; mapping picker may stay empty.", "HA-Benutzerliste in diesem Kontext nicht verfügbar; der Mapping-Picker kann leer bleiben.");
+      host.appendChild(hint);
+    }
+
     (this._data.users || []).forEach((u, idx) => {
       const item = document.createElement("div");
       item.className = "item";
@@ -1127,13 +1136,14 @@ class HAPanelNGAlarm extends HTMLElement {
       };
 
       const modeOptions = this._zoneModeOptions();
+      const haUserOptions = (this._haUsers || []).map((u) => ({ value: u.id, label: u.name }));
       row.append(
         this._sel({ text: {} }, u.name || "", (v) => upd({ name: v }), "Name"),
         this._sel({ text: { type: "password" } }, u.code || "", (v) => upd({ code: v }), "Code"),
         this._sel({ boolean: {} }, !!u.can_arm, (v) => upd({ can_arm: !!v }), "Can arm"),
         this._sel({ boolean: {} }, !!u.can_arm_override, (v) => upd({ can_arm_override: !!v }), this._t("Can arm with override", "Kann mit Override scharf schalten")),
         this._sel(
-          { user: { multiple: true } },
+          { select: { multiple: true, mode: "dropdown", options: haUserOptions } },
           Array.isArray(u.ha_user_ids) ? u.ha_user_ids : [],
           (v) => upd({ ha_user_ids: Array.isArray(v) ? v : [] }),
           this._t("Linked HA users", "Verknüpfte HA-Benutzer")
@@ -1342,6 +1352,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
   async _loadConfig() {
     try {
+      await this._loadHaUsers();
       const data = await this._hass.callApi("get", "ng_alarm/config");
       this._data = {
         name: "NG Alarm",
@@ -1377,6 +1388,17 @@ class HAPanelNGAlarm extends HTMLElement {
     } catch (err) {
       this._configLoaded = false;
       this._status(`${this._t("Load failed", "Laden fehlgeschlagen")}: ${err.message}`, "error");
+    }
+  }
+
+  async _loadHaUsers() {
+    try {
+      const users = await this._hass.callApi("get", "config/users");
+      this._haUsers = (Array.isArray(users) ? users : [])
+        .filter((u) => u && u.id && u.name)
+        .map((u) => ({ id: String(u.id), name: String(u.name) }));
+    } catch (_err) {
+      this._haUsers = [];
     }
   }
 
