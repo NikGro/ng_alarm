@@ -1137,6 +1137,15 @@ class HAPanelNGAlarm extends HTMLElement {
 
       const modeOptions = this._zoneModeOptions();
       const haUserOptions = (this._haUsers || []).map((u) => ({ value: u.id, label: u.name }));
+      const helper = document.createElement("div");
+      helper.className = "muted";
+      helper.style.marginTop = "-2px";
+      helper.style.marginBottom = "6px";
+      helper.textContent = this._t(
+        "Map Home Assistant UI users to this alarm user for code-less arming and proper cause_user logging.",
+        "Ordnen Sie Home-Assistant-UI-Benutzer diesem Alarm-Benutzer zu (für codefreies Scharfschalten und korrektes cause_user-Logging)."
+      );
+
       row.append(
         this._sel({ text: {} }, u.name || "", (v) => upd({ name: v }), "Name"),
         this._sel({ text: { type: "password" } }, u.code || "", (v) => upd({ code: v }), "Code"),
@@ -1148,6 +1157,16 @@ class HAPanelNGAlarm extends HTMLElement {
           (v) => upd({ ha_user_ids: Array.isArray(v) ? v : [] }),
           this._t("Linked HA users", "Verknüpfte HA-Benutzer")
         ),
+        helper,
+      );
+
+      const sep = document.createElement("hr");
+      sep.className = "sep";
+      sep.style.marginTop = "6px";
+      sep.style.marginBottom = "2px";
+      row.append(sep);
+
+      row.append(
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.arm_modes || [], (v) => upd({ arm_modes: v || [] }), "Arm modes"),
         this._sel({ boolean: {} }, !!u.can_disarm, (v) => upd({ can_disarm: !!v }), "Can disarm"),
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.disarm_modes || [], (v) => upd({ disarm_modes: v || [] }), "Disarm modes"),
@@ -1393,12 +1412,25 @@ class HAPanelNGAlarm extends HTMLElement {
 
   async _loadHaUsers() {
     try {
-      const users = await this._hass.callApi("get", "config/users");
+      let users = [];
+      try {
+        users = await this._hass.callWS({ type: "config/auth/list" });
+      } catch (_wsErr) {
+        users = await this._hass.callApi("get", "config/users");
+      }
       this._haUsers = (Array.isArray(users) ? users : [])
-        .filter((u) => u && u.id && u.name)
-        .map((u) => ({ id: String(u.id), name: String(u.name) }));
+        .filter((u) => u && u.id && (u.name || u.username))
+        .map((u) => ({ id: String(u.id), name: String(u.name || u.username) }));
+
+      const currentId = this._hass?.user?.id;
+      const currentName = this._hass?.user?.name || this._hass?.user?.username;
+      if (currentId && currentName && !this._haUsers.some((u) => u.id === currentId)) {
+        this._haUsers.unshift({ id: String(currentId), name: String(currentName) });
+      }
     } catch (_err) {
-      this._haUsers = [];
+      const currentId = this._hass?.user?.id;
+      const currentName = this._hass?.user?.name || this._hass?.user?.username;
+      this._haUsers = currentId && currentName ? [{ id: String(currentId), name: String(currentName) }] : [];
     }
   }
 
