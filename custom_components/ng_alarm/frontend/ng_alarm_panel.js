@@ -374,7 +374,7 @@ class HAPanelNGAlarm extends HTMLElement {
         const dc = String(s?.attributes?.device_class || "").toLowerCase();
         if (!["motion", "occupancy", "presence"].includes(dc)) return;
         if (existing.has(eid)) return;
-        add.push({ entity_id: eid, modes: [], bypass_modes: [], bypass_global_ids: [], allow_open_arm: false, trigger_on_open_only: false, trigger_unknown_unavailable: false });
+        add.push({ entity_id: eid, modes: [], bypass_modes: [], bypass_global_ids: [], allow_open_arm: false, trigger_on_open_only: true, trigger_unknown_unavailable: false });
       });
       this._data.sensor_rules = [...(this._data.sensor_rules || []), ...add];
       this._renderSensors();
@@ -1644,7 +1644,7 @@ class HAPanelNGAlarm extends HTMLElement {
         const z = this._zoneDisplayLabel(ev.zone || "main");
         const causeUser = ev.cause_user || ev.by || ev.actor || "N/A";
         const causeSensor = ev.cause_sensor || "N/A";
-        item.innerHTML = `<strong>[${z}] ${ev.event || "event"}</strong> • ${ts}<br/>${ev.message || ""}<br/><span class="muted">from=${ev.from_state || "N/A"} to=${ev.to_state || "N/A"} cause_user=${causeUser} cause_sensor=${causeSensor} pending_seconds=${ev.pending_seconds ?? 0}</span>`;
+        item.innerHTML = `<strong>[${z}] ${ev.event || "event"}</strong> • ${ts}<br/>${ev.message || ""}<br/><span class="muted">from=${ev.from_state || "N/A"}, to=${ev.to_state || "N/A"}, cause_user=${causeUser}, cause_sensor=${causeSensor}, pending_seconds=${ev.pending_seconds ?? 0}</span>`;
         host.appendChild(item);
       });
     } catch (err) {

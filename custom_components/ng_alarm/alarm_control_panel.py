@@ -175,6 +175,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._last_actor = UNKNOWN
         self._current_mode_id = self._zone_id or UNKNOWN
         self._current_arm_type = UNKNOWN
+        self._pending_seconds = 0
         self._event_log: list[dict[str, Any]] = []
 
         self._exit_unsub = None
@@ -314,11 +315,11 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._last_actor = saved.get("last_actor", UNKNOWN)
             self._current_mode_id = saved.get("current_mode_id", UNKNOWN)
             self._current_arm_type = saved.get("current_arm_type", UNKNOWN)
+            self._pending_seconds = int(saved.get("pending_seconds") or 0)
             self._override_confirm_until = int(saved.get("override_confirm_until") or 0)
             self._override_confirm_mode_id = str(saved.get("override_confirm_mode_id", UNKNOWN) or UNKNOWN)
             self._override_confirm_arm_type = str(saved.get("override_confirm_arm_type", UNKNOWN) or UNKNOWN)
             self._override_confirm_sensors = [str(v) for v in (saved.get("override_confirm_sensors") or []) if str(v).strip()]
-            self._last_event_ts = int(saved.get("last_event_ts") or 0)
             self._event_log = list(saved.get("event_log", []))[-200:]
 
         await self._async_bind_bypass_listener()
@@ -359,11 +360,11 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 "last_actor": self._last_actor,
                 "current_mode_id": self._current_mode_id,
                 "current_arm_type": self._current_arm_type,
+                "pending_seconds": self._pending_seconds,
                 "override_confirm_until": self._override_confirm_until,
                 "override_confirm_mode_id": self._override_confirm_mode_id,
                 "override_confirm_arm_type": self._override_confirm_arm_type,
                 "override_confirm_sensors": self._override_confirm_sensors,
-                "last_event_ts": self._last_event_ts,
                 "event_log": self._event_log[-200:],
             }
         )
@@ -903,6 +904,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if not new_state:
             return
 
+        old_state = event.data.get("old_state")
+        if old_state and str(old_state.state).lower() == str(new_state.state).lower():
+            return
+
         entity_id = event.data.get("entity_id", UNKNOWN)
         rule = self._sensor_rule(entity_id)
 
@@ -920,7 +925,6 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             return
 
         if rule and bool(rule.get(CONF_SENSOR_TRIGGER_ON_OPEN_ONLY, False)):
-            old_state = event.data.get("old_state")
             old_state_value = str(old_state.state).lower() if old_state else ""
             if not (old_state_value in {"off", "closed", "false", "0"} and new_state_value in {"on", "open", "true", "1"}):
                 return
@@ -956,6 +960,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 )
             ),
         )
+        self._pending_seconds = delay
         await self._async_run_transition_actions(prev, "pending", "pending", pending_seconds=delay)
         await self._async_run_scripts(CONF_PENDING_SCRIPTS, "pending", pending_seconds=delay)
         self._cancel_timers()
@@ -963,6 +968,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     async def _async_finish_entry_delay(self, _now):
         self._entry_unsub = None
+        pending_seconds = int(self._pending_seconds or 0)
         prev = _state_str(self._alarm_state)
         self._alarm_state = AlarmControlPanelState.TRIGGERED
         self.async_write_ha_state()
@@ -973,9 +979,11 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             from_state=prev,
             to_state="triggered",
             by=self._last_actor,
+            pending_seconds=pending_seconds,
         )
-        await self._async_run_transition_actions(prev, "triggered", "triggered")
-        await self._async_run_scripts(CONF_TRIGGERED_SCRIPTS, "triggered")
+        await self._async_run_transition_actions(prev, "triggered", "triggered", pending_seconds=pending_seconds)
+        await self._async_run_scripts(CONF_TRIGGERED_SCRIPTS, "triggered", pending_seconds=pending_seconds)
+        self._pending_seconds = 0
         self._schedule_alarm_timeout()
 
     async def _async_finish_exit_delay(self, _now):
@@ -1082,6 +1090,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     async def _async_arm(self, mode: AlarmControlPanelState, delay: int) -> None:
         self._cancel_timers()
+        self._pending_seconds = 0
         self._triggered_sensor = UNKNOWN
         self._triggered_sensor_name = UNKNOWN
         self._armed_mode = mode
@@ -1229,6 +1238,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._armed_mode = None
         self._current_mode_id = UNKNOWN
         self._current_arm_type = UNKNOWN
+        self._pending_seconds = 0
         self._clear_override_confirmation()
         self._triggered_sensor = UNKNOWN
         self._triggered_sensor_name = UNKNOWN
@@ -1320,7 +1330,18 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 from_state=prev,
                 to_state="triggered",
                 by=self._last_actor,
+                pending_seconds=int(self._pending_seconds or 0),
             )
-            await self._async_run_transition_actions(prev, "triggered", "triggered")
-            await self._async_run_scripts(CONF_TRIGGERED_SCRIPTS, "triggered")
+            await self._async_run_transition_actions(
+                prev,
+                "triggered",
+                "triggered",
+                pending_seconds=int(self._pending_seconds or 0),
+            )
+            await self._async_run_scripts(
+                CONF_TRIGGERED_SCRIPTS,
+                "triggered",
+                pending_seconds=int(self._pending_seconds or 0),
+            )
+            self._pending_seconds = 0
             self._schedule_alarm_timeout()
