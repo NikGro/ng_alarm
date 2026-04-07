@@ -177,6 +177,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._current_arm_type = UNKNOWN
         self._pending_seconds = 0
         self._exit_delay_seconds = 0
+        self._entry_delay_seconds = 0
         self._event_log: list[dict[str, Any]] = []
 
         self._exit_unsub = None
@@ -318,6 +319,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._current_arm_type = saved.get("current_arm_type", UNKNOWN)
             self._pending_seconds = int(saved.get("pending_seconds") or 0)
             self._exit_delay_seconds = int(saved.get("exit_delay_seconds") or 0)
+            self._entry_delay_seconds = int(saved.get("entry_delay_seconds") or 0)
             self._override_confirm_until = int(saved.get("override_confirm_until") or 0)
             self._override_confirm_mode_id = str(saved.get("override_confirm_mode_id", UNKNOWN) or UNKNOWN)
             self._override_confirm_arm_type = str(saved.get("override_confirm_arm_type", UNKNOWN) or UNKNOWN)
@@ -364,6 +366,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 "current_arm_type": self._current_arm_type,
                 "pending_seconds": self._pending_seconds,
                 "exit_delay_seconds": self._exit_delay_seconds,
+                "entry_delay_seconds": self._entry_delay_seconds,
                 "override_confirm_until": self._override_confirm_until,
                 "override_confirm_mode_id": self._override_confirm_mode_id,
                 "override_confirm_arm_type": self._override_confirm_arm_type,
@@ -965,6 +968,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 )
             ),
         )
+        self._entry_delay_seconds = delay
         self._pending_seconds = delay
         self._alarm_state = AlarmControlPanelState.PENDING
         self.async_write_ha_state()
@@ -982,7 +986,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     async def _async_finish_entry_delay(self, _now):
         self._entry_unsub = None
-        pending_seconds = int(self._pending_seconds or 0)
+        pending_seconds = int(self._entry_delay_seconds or self._pending_seconds or 0)
         prev = _state_str(self._alarm_state)
         self._alarm_state = AlarmControlPanelState.TRIGGERED
         self.async_write_ha_state()
@@ -997,6 +1001,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         )
         await self._async_run_transition_actions(prev, "triggered", "triggered", pending_seconds=pending_seconds)
         await self._async_run_scripts(CONF_TRIGGERED_SCRIPTS, "triggered", pending_seconds=pending_seconds)
+        self._entry_delay_seconds = 0
         self._pending_seconds = 0
         self._schedule_alarm_timeout()
 
@@ -1019,6 +1024,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         )
         await self._async_run_transition_actions(prev, to_state, to_state, pending_seconds=delay_seconds)
         self._exit_delay_seconds = 0
+        self._entry_delay_seconds = 0
         self._pending_seconds = 0
 
         arm_target = str((self._mode_config() or {}).get("arm_target", "")).lower()
@@ -1110,6 +1116,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._cancel_timers()
         self._pending_seconds = int(delay or 0)
         self._exit_delay_seconds = int(delay or 0)
+        self._entry_delay_seconds = 0
         self._triggered_sensor = UNKNOWN
         self._triggered_sensor_name = UNKNOWN
         self._armed_mode = mode
@@ -1259,6 +1266,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._current_arm_type = UNKNOWN
         self._pending_seconds = 0
         self._exit_delay_seconds = 0
+        self._entry_delay_seconds = 0
         self._clear_override_confirmation()
         self._triggered_sensor = UNKNOWN
         self._triggered_sensor_name = UNKNOWN
@@ -1365,4 +1373,5 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             )
             self._pending_seconds = 0
             self._exit_delay_seconds = 0
+            self._entry_delay_seconds = 0
             self._schedule_alarm_timeout()
