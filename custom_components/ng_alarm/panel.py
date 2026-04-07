@@ -66,13 +66,19 @@ class NGAlarmConfigView(HomeAssistantView):
                 if isinstance(z, dict) and str((z or {}).get("id", "")).strip()
             }
             keep_unique_ids = {f"{DOMAIN}_{zid}" for zid in zone_ids} or {f"{DOMAIN}_main"}
+            keep_event_sensor_ids = {
+                f"{DOMAIN}_eventsensor_{zid}" for zid in zone_ids
+            } or {f"{DOMAIN}_eventsensor_main"}
+            expose_event_sensor = bool(normalized.get("expose_event_log_sensor", False))
             for entry in er.async_entries_for_config_entry(registry, entry_id):
-                if entry.domain != "alarm_control_panel":
-                    continue
-                if not (entry.unique_id or "").startswith(f"{DOMAIN}_"):
-                    continue
-                if entry.unique_id not in keep_unique_ids:
-                    registry.async_remove(entry.entity_id)
+                uid = entry.unique_id or ""
+                if entry.domain == "alarm_control_panel":
+                    if uid.startswith(f"{DOMAIN}_") and uid not in keep_unique_ids:
+                        registry.async_remove(entry.entity_id)
+                elif entry.domain == "sensor":
+                    if uid.startswith(f"{DOMAIN}_eventsensor_"):
+                        if (not expose_event_sensor) or (uid not in keep_event_sensor_ids):
+                            registry.async_remove(entry.entity_id)
 
         for entity in (runtime.entities or ([runtime.entity] if runtime.entity else [])):
             if entity:

@@ -14,16 +14,17 @@ from homeassistant.components.alarm_control_panel import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.components import persistent_notification
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.template import Template, TemplateError, result_as_boolean
 
 from .const import (
     ATTR_ALARM_MODE,
-    ATTR_ALARM_STATE,
     ATTR_ACTOR,
     ATTR_TRIGGERED_SENSOR,
     ATTR_TRIGGERED_SENSOR_NAME,
+    CONF_ARM_OVERRIDE_CONFIRM_WINDOW,
     CONF_ACTIONS,
     CONF_ACTION_BY_USER,
     CONF_ACTION_FROM,
@@ -58,9 +59,11 @@ from .const import (
     CONF_MODES,
     CONF_NAME,
     CONF_PENDING_SCRIPTS,
+    CONF_OVERRIDE_REQUIRED_PERSISTENT_NOTICE,
     CONF_REQUIRE_CODE_TO_ARM,
     CONF_REQUIRE_CODE_TO_DISARM,
     CONF_REQUIRE_CODE_TO_MODE_CHANGE,
+    CONF_REQUIRE_SECOND_ARM_FOR_OVERRIDE,
     CONF_SENSOR_BYPASS_GLOBAL_IDS,
     CONF_SENSOR_RULES,
     CONF_SENSOR_TRIGGER_ON_OPEN_ONLY,
@@ -70,6 +73,7 @@ from .const import (
     CONF_USER_CAN_ARM,
     CONF_USER_CAN_ARM_OVERRIDE,
     CONF_USER_CAN_DISARM,
+    CONF_USER_HA_USER_IDS,
     CONF_USER_ARM_MODES,
     CONF_USER_DISARM_MODES,
     CONF_USER_CODE,
@@ -179,10 +183,65 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._sensor_unsub = None
         self._bypass_unsub = None
         self._arm_override_requested = False
+        self._override_confirm_until = 0
+        self._override_confirm_mode_id = UNKNOWN
+        self._override_confirm_arm_type = UNKNOWN
+        self._override_confirm_sensors: list[str] = []
 
     def _apply_code_format(self) -> None:
         mode = str(self._config.get(CONF_CODE_INPUT_MODE, "pin") or "pin").strip().lower()
         self._attr_code_format = CodeFormat.TEXT if mode == "password" else CodeFormat.NUMBER
+
+    def _override_window(self) -> int:
+        try:
+            return max(5, int(self._config.get(CONF_ARM_OVERRIDE_CONFIRM_WINDOW, 20) or 20))
+        except (TypeError, ValueError):
+            return 20
+
+    def _clear_override_confirmation(self) -> None:
+        self._override_confirm_until = 0
+        self._override_confirm_mode_id = UNKNOWN
+        self._override_confirm_arm_type = UNKNOWN
+        self._override_confirm_sensors = []
+
+    def _set_override_confirmation(self, mode_id: str, arm_type: str, sensors: list[str]) -> None:
+        self._override_confirm_until = int(time.time()) + self._override_window()
+        self._override_confirm_mode_id = _normalize_mode_id(mode_id)
+        self._override_confirm_arm_type = str(arm_type or UNKNOWN).strip().lower()
+        self._override_confirm_sensors = list(sensors or [])
+
+    def _is_override_confirmation_valid(self, mode_id: str, arm_type: str) -> bool:
+        if int(time.time()) > int(self._override_confirm_until or 0):
+            return False
+        return (
+            _normalize_mode_id(mode_id) == _normalize_mode_id(self._override_confirm_mode_id)
+            and str(arm_type or UNKNOWN).strip().lower()
+            == str(self._override_confirm_arm_type or UNKNOWN).strip().lower()
+        )
+
+    def _require_second_override_arm(self) -> bool:
+        return bool(self._config.get(CONF_REQUIRE_SECOND_ARM_FOR_OVERRIDE, True))
+
+    async def _async_override_required_notice(self, blocking: list[str]) -> None:
+        if not bool(self._config.get(CONF_OVERRIDE_REQUIRED_PERSISTENT_NOTICE, True)):
+            return
+        names: list[str] = []
+        for eid in blocking:
+            st = self.hass.states.get(eid)
+            names.append(st.attributes.get("friendly_name", eid) if st else eid)
+        de = str(self.hass.config.language or "").lower().startswith("de")
+        title = "Force-Arm Bestätigung erforderlich" if de else "Force-arm confirmation required"
+        msg = (
+            "Es sind Sensoren offen: " + ", ".join(names) + ". Bitte erneut scharf schalten, um Override zu bestätigen."
+            if de
+            else "Open sensors: " + ", ".join(names) + ". Arm again to confirm override."
+        )
+        persistent_notification.async_create(
+            self.hass,
+            msg,
+            title=title,
+            notification_id=f"{DOMAIN}_override_required_{self._zone_id or 'main'}",
+        )
 
     @property
     def supported_features(self) -> AlarmControlPanelEntityFeature:
@@ -255,6 +314,11 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._last_actor = saved.get("last_actor", UNKNOWN)
             self._current_mode_id = saved.get("current_mode_id", UNKNOWN)
             self._current_arm_type = saved.get("current_arm_type", UNKNOWN)
+            self._override_confirm_until = int(saved.get("override_confirm_until") or 0)
+            self._override_confirm_mode_id = str(saved.get("override_confirm_mode_id", UNKNOWN) or UNKNOWN)
+            self._override_confirm_arm_type = str(saved.get("override_confirm_arm_type", UNKNOWN) or UNKNOWN)
+            self._override_confirm_sensors = [str(v) for v in (saved.get("override_confirm_sensors") or []) if str(v).strip()]
+            self._last_event_ts = int(saved.get("last_event_ts") or 0)
             self._event_log = list(saved.get("event_log", []))[-200:]
 
         await self._async_bind_bypass_listener()
@@ -274,6 +338,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._config = new_config
         self._apply_code_format()
         self._attr_name = self._config.get(CONF_NAME, "NG Alarm")
+        if int(time.time()) > int(self._override_confirm_until or 0):
+            self._clear_override_confirmation()
         await self._async_bind_bypass_listener()
         self._async_refresh_sensor_listener()
         self.async_write_ha_state()
@@ -293,6 +359,11 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 "last_actor": self._last_actor,
                 "current_mode_id": self._current_mode_id,
                 "current_arm_type": self._current_arm_type,
+                "override_confirm_until": self._override_confirm_until,
+                "override_confirm_mode_id": self._override_confirm_mode_id,
+                "override_confirm_arm_type": self._override_confirm_arm_type,
+                "override_confirm_sensors": self._override_confirm_sensors,
+                "last_event_ts": self._last_event_ts,
                 "event_log": self._event_log[-200:],
             }
         )
@@ -312,18 +383,35 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                     s.async_write_ha_state()
 
     async def _async_log_event(self, event_type: str, message: str, **meta: Any) -> None:
+        zone_raw = meta.get("zone", self._zone_id or "main")
+        if isinstance(zone_raw, list):
+            zone = ", ".join(str(v) for v in zone_raw if str(v).strip()) or "main"
+        else:
+            zone = str(zone_raw or "main")
+        sensors = meta.get("sensors")
+        sensor_list = [str(v) for v in sensors] if isinstance(sensors, list) else []
+        if not sensor_list and self._triggered_sensor not in {None, "", UNKNOWN}:
+            sensor_list = [str(self._triggered_sensor)]
+        sensor_name_list: list[str] = []
+        for eid in sensor_list:
+            st = self.hass.states.get(eid)
+            sensor_name_list.append(st.attributes.get("friendly_name", eid) if st else eid)
+
+        cause_user = str(meta.get("cause_user", meta.get("by", self._last_actor)) or "").strip() or "N/A"
+        cause_sensor = ", ".join(sensor_list) if sensor_list else "N/A"
+        cause_sensor_name = ", ".join(sensor_name_list) if sensor_name_list else "N/A"
+
         entry = {
             "ts": int(time.time()),
             "event": event_type,
             "message": message,
-            "state": _state_str(self._alarm_state),
-            "mode": _state_str(self._armed_mode) if self._armed_mode else UNKNOWN,
-            "zone": self._zone_id or "main",
-            "arm_type": self._current_arm_type,
-            "actor": self._last_actor,
-            "from_state": meta.get("from_state", UNKNOWN),
+            "zone": zone,
+            "from_state": meta.get("from_state", "N/A"),
             "to_state": meta.get("to_state", _state_str(self._alarm_state)),
-            "by": meta.get("by", self._last_actor),
+            "cause_user": cause_user,
+            "cause_sensor": cause_sensor,
+            "cause_sensor_name": cause_sensor_name,
+            "pending_seconds": int(meta.get("pending_seconds") or 0),
         }
         entry.update({k: v for k, v in meta.items() if v is not None})
         self._event_log.append(entry)
@@ -341,6 +429,41 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             if entered and str(user.get(CONF_USER_CODE, "")) == entered:
                 return user
         return None
+
+    def _resolve_user_from_ha_user_id(self, ha_user_id: str | None) -> dict[str, Any] | None:
+        uid = str(ha_user_id or "").strip()
+        if not uid:
+            return None
+        for user in self._config.get(CONF_USERS, []):
+            ids = [str(v).strip() for v in (user.get(CONF_USER_HA_USER_IDS, []) or []) if str(v).strip()]
+            if uid in ids:
+                return user
+        return None
+
+    def _any_ha_user_mapping_defined(self) -> bool:
+        for user in self._config.get(CONF_USERS, []):
+            ids = [str(v).strip() for v in (user.get(CONF_USER_HA_USER_IDS, []) or []) if str(v).strip()]
+            if ids:
+                return True
+        return False
+
+    def _user_can_arm_mode(self, user: dict[str, Any], mode_id: str) -> bool:
+        allowed_raw = [str(v).strip().lower() for v in user.get(CONF_USER_ARM_MODES, []) if str(v).strip()]
+        # UI rule: no arm mode selection means no arm permission.
+        if not allowed_raw:
+            return False
+        allowed_zone = {_normalize_mode_id(v.split(":", 1)[0]) for v in allowed_raw}
+        allowed_pairs = set(allowed_raw)
+        current_pair = f"{mode_id}:{self._current_arm_type}"
+        return mode_id in allowed_zone or current_pair in allowed_pairs
+
+    def _user_can_disarm_mode(self, user: dict[str, Any], mode_id: str) -> bool:
+        allowed_raw = [str(v).strip().lower() for v in user.get(CONF_USER_DISARM_MODES, []) if str(v).strip()]
+        # UI rule: no disarm mode selection means no disarm permission.
+        if not allowed_raw:
+            return False
+        allowed_zone = {_normalize_mode_id(v.split(":", 1)[0]) for v in allowed_raw}
+        return _normalize_mode_id(mode_id) in allowed_zone
 
     def _with_users(self) -> bool:
         return bool(self._config.get(CONF_USERS))
@@ -442,21 +565,34 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         mode_id = _normalize_mode_id(mode_id)
         cleaned_code = _clean_code(code)
 
-        # Hard rule requested: if code is not required for this arm type, allow arming directly.
         if not require_code:
+            # Optional: map HA UI user to alarm user for permission checks.
+            if self._with_users():
+                # If a code is still entered, prefer explicit alarm-user lookup.
+                if cleaned_code:
+                    user = self._resolve_user_from_code(cleaned_code)
+                    if not user or not self._user_can_arm_mode(user, mode_id):
+                        return None
+                    self._arm_override_requested = bool(user.get(CONF_USER_CAN_ARM_OVERRIDE, False))
+                    return self._actor_name(user)
+
+                ctx = getattr(self, "_context", None)
+                mapped = self._resolve_user_from_ha_user_id(getattr(ctx, "user_id", None))
+                if mapped:
+                    if not self._user_can_arm_mode(mapped, mode_id):
+                        return None
+                    self._arm_override_requested = bool(mapped.get(CONF_USER_CAN_ARM_OVERRIDE, False))
+                    return self._actor_name(mapped)
+
+                # If mappings are defined, block unmapped UI users.
+                if self._any_ha_user_mapping_defined():
+                    return None
             return UNKNOWN
 
         if self._with_users():
             user = self._resolve_user_from_code(cleaned_code)
-            if not user or not bool(user.get(CONF_USER_CAN_ARM, False)):
+            if not user or not self._user_can_arm_mode(user, mode_id):
                 return None
-            allowed_raw = [str(v).strip().lower() for v in user.get(CONF_USER_ARM_MODES, []) if str(v).strip()]
-            if allowed_raw:
-                allowed_zone = {_normalize_mode_id(v.split(":", 1)[0]) for v in allowed_raw}
-                allowed_pairs = set(allowed_raw)
-                current_pair = f"{mode_id}:{self._current_arm_type}"
-                if mode_id not in allowed_zone and current_pair not in allowed_pairs:
-                    return None
             self._arm_override_requested = bool(user.get(CONF_USER_CAN_ARM_OVERRIDE, False))
             return self._actor_name(user)
 
@@ -487,26 +623,38 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         normalized = {str(v).strip().lower() for v in filters if str(v).strip()}
         if not normalized:
             return True
-        return "any" in normalized or str(value).strip().lower() in normalized
+        current = str(value).strip().lower()
+        if "any_armed" in normalized and current.startswith("armed_"):
+            return True
+        return "any" in normalized or current in normalized
 
     async def _async_run_transition_actions(
         self,
         from_state: str,
         to_state: str,
         alarm_state: str,
+        pending_seconds: int | None = None,
+        blocking_sensors: list[str] | None = None,
     ) -> None:
         through_state = self._current_mode_id if self._current_mode_id != UNKNOWN else (_state_str(self._armed_mode) if self._armed_mode else UNKNOWN)
         through_mode = str(self._current_arm_type or UNKNOWN)
+        blocking_sensors = list(blocking_sensors or [])
+        blocking_sensor_names: list[str] = []
+        for eid in blocking_sensors:
+            st = self.hass.states.get(eid)
+            blocking_sensor_names.append(
+                st.attributes.get("friendly_name", eid) if st else eid
+            )
+
         variables = {
-            ATTR_TRIGGERED_SENSOR: self._triggered_sensor,
-            ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
-            ATTR_ALARM_MODE: through_state,
-            ATTR_ALARM_STATE: alarm_state,
-            ATTR_ACTOR: self._last_actor,
             "zone": self._zone_id or "main",
             "arm_type": through_mode,
             "from_state": from_state,
             "to_state": to_state,
+            "pending_seconds": int(pending_seconds or 0),
+            "cause_user": (str(self._last_actor or "").strip() or "N/A"),
+            "cause_sensor": ", ".join(blocking_sensors) if blocking_sensors else (self._triggered_sensor if self._triggered_sensor not in {None, "", UNKNOWN} else "N/A"),
+            "cause_sensor_name": ", ".join(blocking_sensor_names) if blocking_sensor_names else (self._triggered_sensor_name if self._triggered_sensor_name not in {None, "", UNKNOWN} else "N/A"),
         }
         for action in self._config.get(CONF_ACTIONS, []):
             if not isinstance(action, dict):
@@ -545,15 +693,16 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                         blocking=False,
                     )
 
-    async def _async_run_scripts(self, key: str, alarm_state: str) -> None:
+    async def _async_run_scripts(self, key: str, alarm_state: str, pending_seconds: int | None = None) -> None:
         variables = {
-            ATTR_TRIGGERED_SENSOR: self._triggered_sensor,
-            ATTR_TRIGGERED_SENSOR_NAME: self._triggered_sensor_name,
-            ATTR_ALARM_MODE: self._current_mode_id if self._current_mode_id != UNKNOWN else (_state_str(self._armed_mode) if self._armed_mode else UNKNOWN),
-            ATTR_ALARM_STATE: alarm_state,
-            ATTR_ACTOR: self._last_actor,
             "zone": self._zone_id or "main",
             "arm_type": self._current_arm_type,
+            "pending_seconds": int(pending_seconds or 0),
+            "from_state": "N/A",
+            "to_state": alarm_state,
+            "cause_user": (str(self._last_actor or "").strip() or "N/A"),
+            "cause_sensor": self._triggered_sensor if self._triggered_sensor not in {None, "", UNKNOWN} else "N/A",
+            "cause_sensor_name": self._triggered_sensor_name if self._triggered_sensor_name not in {None, "", UNKNOWN} else "N/A",
         }
         for entity_id in self._config.get(key, []):
             await self.hass.services.async_call(
@@ -795,8 +944,6 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             f"Sensor {self._triggered_sensor_name} triggered pending state",
             sensor=self._triggered_sensor,
         )
-        await self._async_run_transition_actions(prev, "pending", "pending")
-        await self._async_run_scripts(CONF_PENDING_SCRIPTS, "pending")
 
         delay = self._mode_delay(
             "entry_delay",
@@ -809,6 +956,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 )
             ),
         )
+        await self._async_run_transition_actions(prev, "pending", "pending", pending_seconds=delay)
+        await self._async_run_scripts(CONF_PENDING_SCRIPTS, "pending", pending_seconds=delay)
         self._cancel_timers()
         self._entry_unsub = async_call_later(self.hass, delay, self._async_finish_entry_delay)
 
@@ -955,15 +1104,48 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
         if blocking:
             if self._arm_override_requested:
-                await self._async_log_event(
-                    "arm_override",
-                    "Arming override used despite open sensors",
-                    from_state=prev,
-                    to_state="arming" if delay > 0 else _state_str(mode),
-                    by=self._last_actor,
-                    sensors=blocking,
-                )
+                if not self._require_second_override_arm():
+                    await self._async_log_event(
+                        "arm_override_confirmed",
+                        "Arming override confirmed",
+                        from_state=prev,
+                        to_state="arming" if delay > 0 else _state_str(mode),
+                        by=self._last_actor,
+                        sensors=blocking,
+                    )
+                    self._clear_override_confirmation()
+                elif self._is_override_confirmation_valid(self._current_mode_id, self._current_arm_type):
+                    await self._async_log_event(
+                        "arm_override_confirmed",
+                        "Arming override confirmed",
+                        from_state=prev,
+                        to_state="arming" if delay > 0 else _state_str(mode),
+                        by=self._last_actor,
+                        sensors=blocking,
+                    )
+                    self._clear_override_confirmation()
+                else:
+                    self._set_override_confirmation(self._current_mode_id, self._current_arm_type, blocking)
+                    await self._async_log_event(
+                        "arm_override_required",
+                        "Arming blocked: override confirmation required",
+                        from_state=prev,
+                        to_state=prev,
+                        by=self._last_actor,
+                        sensors=blocking,
+                        pending_seconds=self._override_window(),
+                    )
+                    await self._async_run_transition_actions(
+                        prev,
+                        "arm_blocked",
+                        "arm_blocked",
+                        pending_seconds=self._override_window(),
+                        blocking_sensors=blocking,
+                    )
+                    await self._async_override_required_notice(blocking)
+                    return
             else:
+                self._clear_override_confirmation()
                 await self._async_log_event(
                     "arm_blocked",
                     "Arming blocked due to open sensors",
@@ -972,7 +1154,16 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                     by=self._last_actor,
                     sensors=blocking,
                 )
+                # Trigger action-builder flows for blocked arming attempts.
+                await self._async_run_transition_actions(
+                    prev,
+                    "arm_blocked",
+                    "arm_blocked",
+                    blocking_sensors=blocking,
+                )
                 return
+
+        self._clear_override_confirmation()
 
         self._alarm_state = AlarmControlPanelState.ARMING if delay > 0 else mode
         self.async_write_ha_state()
@@ -1011,7 +1202,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         if not require_code:
             if self._with_users() and code:
                 user = self._resolve_user_from_code(code)
-                if user and bool(user.get(CONF_USER_CAN_DISARM, False)):
+                if user and self._user_can_disarm_mode(user, self._current_mode_id):
                     actor = self._actor_name(user)
             self._last_actor = actor
         elif self._with_users():
@@ -1020,17 +1211,9 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 await self._async_log_event("denied", "Denied disarm: unknown user code")
                 return
             actor = self._actor_name(user)
-            if not bool(user.get(CONF_USER_CAN_DISARM, False)):
+            if not self._user_can_disarm_mode(user, self._current_mode_id):
                 await self._async_log_event("denied", "Denied disarm: missing disarm permission")
                 return
-            allowed_raw = [str(v).strip().lower() for v in user.get(CONF_USER_DISARM_MODES, []) if str(v).strip()]
-            if allowed_raw and self._current_mode_id != UNKNOWN:
-                allowed_zone = {_normalize_mode_id(v.split(":", 1)[0]) for v in allowed_raw}
-                allowed_pairs = set(allowed_raw)
-                current_pair = f"{self._current_mode_id}:{self._current_arm_type}"
-                if self._current_mode_id not in allowed_zone and current_pair not in allowed_pairs:
-                    await self._async_log_event("denied", "Denied disarm: mode not allowed for user")
-                    return
         else:
             await self._async_log_event("denied", "Denied disarm: no users configured")
             return
@@ -1046,6 +1229,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._armed_mode = None
         self._current_mode_id = UNKNOWN
         self._current_arm_type = UNKNOWN
+        self._clear_override_confirmation()
         self._triggered_sensor = UNKNOWN
         self._triggered_sensor_name = UNKNOWN
         self.async_write_ha_state()

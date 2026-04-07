@@ -12,7 +12,10 @@ class HAPanelNGAlarm extends HTMLElement {
     this._openGlobalBypassDetails = {};
     this._openSensorDetails = {};
     this._sensorConfigClipboard = null;
+    this._actionConfigClipboard = null;
     this._sensorDropIndicator = null;
+    this._dragIndicators = {};
+    this._haUsers = [];
     this._autosaveTimer = null;
     this._autosaveInFlight = false;
     this._configLoaded = false;
@@ -70,13 +73,17 @@ class HAPanelNGAlarm extends HTMLElement {
           box-sizing:border-box;
           background: var(--primary-background-color);
         }
-        .wrap { padding: 0 12px 12px; max-width: 980px; margin: 0 auto; color: var(--primary-text-color); }
+        .wrap { padding: 0 12px 12px; max-width: none; margin: 0; color: var(--primary-text-color); }
+        .content { max-width: 980px; margin: 0 auto; }
         .head-native {
           display:flex;
           align-items:center;
           min-height: 56px;
           margin: 0 -12px 10px;
           padding: 0 12px;
+          width: auto;
+          max-width: none;
+          overflow: hidden;
           box-sizing: border-box;
           background: var(--app-header-background-color, var(--card-background-color));
           border-bottom: 1px solid var(--divider-color);
@@ -89,12 +96,12 @@ class HAPanelNGAlarm extends HTMLElement {
           border: none !important;
           background: transparent !important;
           box-shadow: none !important;
-          display: inline-flex;
+          display: none;
           align-items: center;
           justify-content: center;
         }
         .head-title {
-          margin-left: 8px;
+          margin-left: 0;
           font-size: 1rem;
           font-weight: 600;
           line-height: 1;
@@ -103,7 +110,7 @@ class HAPanelNGAlarm extends HTMLElement {
           align-items: center;
         }
         .head-spacer { flex: 1; }
-        .head-version { font-size: 0.85rem; color: var(--secondary-text-color); }
+        .head-version { font-size: 0.85rem; color: var(--secondary-text-color); padding-right: 2px; }
         .muted { color: var(--secondary-text-color); font-size: 0.9rem; }
 
         .tabs { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin: 12px 0; }
@@ -186,6 +193,7 @@ class HAPanelNGAlarm extends HTMLElement {
         .sensor-btn-top { display:flex; justify-content:center; gap:10px; }
         .sensor-btn-top .btn { min-width: 170px; min-height: 40px; border-radius: 999px; }
         .sensor-btn-delete { margin-top: 12px; display:flex; justify-content:flex-start; }
+        .system-notice-wrap { margin-top: 12px; margin-bottom: 10px; }
         .summary-with-handle {
           display:inline-flex;
           align-items:center;
@@ -214,7 +222,10 @@ class HAPanelNGAlarm extends HTMLElement {
 
         @media (max-width: 800px) {
           .wrap { max-width: 100%; padding: 0 10px 10px; }
+          .content { max-width: 100%; }
           .head-native { margin: 0 -10px 10px; }
+          .menu-btn { display: inline-flex; }
+          .head-title { margin-left: 8px; }
           .tabs { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; justify-content: stretch; }
           .tab { flex: 1 1 auto; }
           .btn-save { min-width: 156px; }
@@ -230,6 +241,8 @@ class HAPanelNGAlarm extends HTMLElement {
           <div class="head-spacer"></div>
           <div class="head-version" id="header-version">v–</div>
         </div>
+
+        <div class="content">
 
         <div class="tabs">
           <button class="tab" data-tab="general"><ha-icon icon="mdi:cog-outline"></ha-icon>${this._t("General", "Allgemein")}</button>
@@ -286,7 +299,7 @@ class HAPanelNGAlarm extends HTMLElement {
             <div id="actions-list" class="list"></div>
             <button id="actions-add" class="btn" type="button">${this._t("+ Add action", "+ Aktion hinzufügen")}</button>
             <div class="muted card-subtitle" style="margin-top:10px">
-              Script/target variables available: <code>from_state</code>, <code>to_state</code>, <code>alarm_mode</code>, <code>zone</code>, <code>arm_type</code>, <code>actor</code>, <code>triggered_sensor</code>, <code>triggered_sensor_name</code>.
+              ${this._t("Variables available", "Verfügbare Variablen")}: <code>zone</code>, <code>from_state</code>, <code>to_state</code>, <code>arm_type</code>, <code>cause_user</code>, <code>cause_sensor</code>, <code>cause_sensor_name</code>, <code>pending_seconds</code>.
             </div>
           </ha-card>
         </div>
@@ -310,6 +323,7 @@ class HAPanelNGAlarm extends HTMLElement {
         <div class="footer">
           <button id="save" class="btn primary btn-save">${this._t("Save & Reload", "Speichern & Neu laden")}</button>
           <div class="muted" id="status"></div>
+        </div>
         </div>
       </div>
     `;
@@ -386,7 +400,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
     this.shadowRoot.getElementById("users-add").addEventListener("click", () => {
       const users = [...(this._data.users || [])];
-      users.push({ name: "", code: "", can_arm: true, can_arm_override: false, can_disarm: true, arm_modes: [], disarm_modes: [] });
+      users.push({ name: "", code: "", can_arm_override: false, ha_user_ids: [], arm_modes: [], disarm_modes: [] });
       this._data.users = users;
       this._renderUsers();
       this._scheduleAutosave();
@@ -495,6 +509,72 @@ class HAPanelNGAlarm extends HTMLElement {
     return `${zoneName} (${map[String(armType).toLowerCase()] || armType})`;
   }
 
+  _actionStateOptionsForZones(zoneIds) {
+    const selected = Array.isArray(zoneIds) && zoneIds.length ? zoneIds : ["any"];
+    const anyZone = selected.includes("any");
+    const modeMap = {
+      away: { value: "armed_away", en: "Armed Away", de: "Scharf Abwesend" },
+      home: { value: "armed_home", en: "Armed Home", de: "Scharf Zuhause" },
+      night: { value: "armed_night", en: "Armed Night", de: "Scharf Nacht" },
+      vacation: { value: "armed_vacation", en: "Armed Vacation", de: "Scharf Urlaub" },
+    };
+
+    let armTypes = new Set();
+    let reduced = false;
+    if (anyZone) {
+      (this._data.modes || []).forEach((z) => {
+        const types = Array.isArray(z.arm_types) && z.arm_types.length ? z.arm_types : [z.arm_target || "away"];
+        types.forEach((t) => armTypes.add(String(t || "").toLowerCase()));
+      });
+      if (!armTypes.size) armTypes = new Set(["away", "home"]);
+    } else {
+      const zoneSets = selected.map((id) => {
+        const z = (this._data.modes || []).find((m) => String(m.id || "") === String(id));
+        const types = z ? (Array.isArray(z.arm_types) && z.arm_types.length ? z.arm_types : [z.arm_target || "away"]) : ["away"];
+        return new Set(types.map((t) => String(t || "").toLowerCase()));
+      });
+      if (zoneSets.length) {
+        armTypes = new Set(zoneSets[0]);
+        zoneSets.slice(1).forEach((s) => {
+          armTypes = new Set([...armTypes].filter((x) => s.has(x)));
+        });
+        const union = new Set();
+        zoneSets.forEach((s) => [...s].forEach((x) => union.add(x)));
+        reduced = armTypes.size < union.size;
+      }
+      if (!armTypes.size) armTypes = new Set(["away"]);
+    }
+
+    const opts = [
+      { value: "any", label: this._t("Any — all transitions", "Beliebig — alle Übergänge") },
+      { value: "disarmed", label: this._t("Disarmed — alarm off", "Unscharf — Alarm aus") },
+      { value: "arming", label: this._t("Arming — exit delay running", "Scharfschalten — Exit-Delay läuft") },
+      { value: "pending", label: this._t("Pending — entry delay running", "Auslöseverzögerung — Entry-Delay läuft") },
+      { value: "triggered", label: this._t("Triggered — alarm active", "Ausgelöst — Alarm aktiv") },
+      { value: "arm_blocked", label: this._t("Arm blocked — open sensors", "Scharfschalten blockiert — offene Sensoren") },
+    ];
+
+    opts.splice(1, 0, { value: "any_armed", label: this._t("Any armed state — all armed_*", "Beliebiger Scharf-Zustand — alle armed_*") });
+
+    const anyZoneText = this._t("in any zone", "in beliebiger Zone");
+    Array.from(armTypes).forEach((t) => {
+      const meta = modeMap[t];
+      if (!meta) return;
+      const label = anyZone
+        ? `${this._t(meta.en, meta.de)} (${anyZoneText})`
+        : this._t(meta.en, meta.de);
+      opts.splice(3, 0, { value: meta.value, label });
+    });
+
+    return { options: opts, reduced };
+  }
+
+  _actionToOptions(fromState, options) {
+    const from = String(fromState || "any");
+    if (!from || from === "any") return options;
+    return options.filter((o) => o.value === "any" || o.value !== from);
+  }
+
   _renderGeneral() {
     const host = this.shadowRoot.getElementById("general-settings-list");
     if (!host) return;
@@ -519,7 +599,45 @@ class HAPanelNGAlarm extends HTMLElement {
         (v) => upd({ code_input_mode: v || "pin" }),
         this._t("Code input mode", "Code-Eingabemodus")
       ),
+      this._sel(
+        { boolean: {} },
+        this._data.require_second_arm_for_override !== false,
+        (v) => {
+          upd({ require_second_arm_for_override: !!v });
+          this._renderGeneral();
+          this._renderActions();
+        },
+        this._t("Second arming required for force-arm", "Zweites Scharfschalten für Force-Arm erforderlich")
+      ),
     );
+
+    const helper = document.createElement("div");
+    helper.className = "muted";
+    helper.style.marginTop = "2px";
+    helper.textContent = this._t(
+      "When enabled, users with force permission must arm twice within the configured time window.",
+      "Wenn aktiv, müssen Benutzer mit Force-Recht innerhalb des Zeitfensters zweimal scharf schalten."
+    );
+    host.append(helper);
+
+    if (this._data.require_second_arm_for_override !== false) {
+      host.append(
+      this._sel(
+        { number: { min: 5, max: 120, step: 1, mode: "box", unit_of_measurement: "s" } },
+        Number(this._data.arm_override_confirm_window ?? 20),
+        (v) => upd({ arm_override_confirm_window: Math.max(5, Number(v || 20)) }),
+        this._t("Force-arm confirm window", "Force-Arm Bestätigungsfenster")
+      ),
+      );
+      const helper2 = document.createElement("div");
+      helper2.className = "muted";
+      helper2.style.marginTop = "-2px";
+      helper2.textContent = this._t(
+        "Time in seconds for the second force-arm confirmation.",
+        "Zeitfenster in Sekunden für die zweite Force-Arm-Bestätigung."
+      );
+      host.append(helper2);
+    }
   }
 
   _renderModes() {
@@ -530,6 +648,11 @@ class HAPanelNGAlarm extends HTMLElement {
     (this._data.modes || []).forEach((mode, idx) => {
       const item = document.createElement("div");
       item.className = "item";
+      this._bindSimpleDnD(item, idx, host, "modes", () => {
+        this._renderModes();
+        this._renderSensors();
+        this._renderActions();
+      });
       const details = document.createElement("details");
       const zoneKey = (mode.id || `zone_${idx}`).toString();
       details.open = Object.prototype.hasOwnProperty.call(this._openZoneDetails, zoneKey)
@@ -539,7 +662,7 @@ class HAPanelNGAlarm extends HTMLElement {
         this._openZoneDetails[zoneKey] = details.open;
       });
       const summary = document.createElement("summary");
-      summary.innerHTML = `<ha-icon icon="${mode.icon || "mdi:shield"}"></ha-icon> ${mode.name || mode.id || `Zone #${idx + 1}`}`;
+      summary.innerHTML = this._summaryWithHandle(mode.icon || "mdi:shield", mode.name || mode.id || `Zone #${idx + 1}`);
       details.appendChild(summary);
 
       const row = document.createElement("div");
@@ -551,7 +674,7 @@ class HAPanelNGAlarm extends HTMLElement {
         if ((!next.id || patch.name !== undefined) && next.name) next.id = this._slugify(next.name);
         modes[idx] = next;
         this._data.modes = modes;
-        summary.innerHTML = `<ha-icon icon="${next.icon || "mdi:shield"}"></ha-icon> ${next.name || next.id || `Zone #${idx + 1}`}`;
+        summary.innerHTML = this._summaryWithHandle(next.icon || "mdi:shield", next.name || next.id || `Zone #${idx + 1}`);
       };
 
       const selectedArmTypes = Array.isArray(mode.arm_types) && mode.arm_types.length
@@ -649,6 +772,10 @@ class HAPanelNGAlarm extends HTMLElement {
     (this._data.global_bypass_rules || []).forEach((rule, idx) => {
       const item = document.createElement("div");
       item.className = "item";
+      this._bindSimpleDnD(item, idx, host, "global_bypass_rules", () => {
+        this._renderGlobalBypass();
+        this._renderSensors();
+      });
       const details = document.createElement("details");
       const key = (rule.id || `global_${idx}`).toString();
       details.open = Object.prototype.hasOwnProperty.call(this._openGlobalBypassDetails, key)
@@ -658,7 +785,7 @@ class HAPanelNGAlarm extends HTMLElement {
         this._openGlobalBypassDetails[key] = details.open;
       });
       const summary = document.createElement("summary");
-      summary.innerHTML = `<ha-icon icon="${rule.icon || "mdi:swap-horizontal"}"></ha-icon> ${rule.name || rule.id || `Global bypass #${idx + 1}`}`;
+      summary.innerHTML = this._summaryWithHandle(rule.icon || "mdi:swap-horizontal", rule.name || rule.id || `Global bypass #${idx + 1}`);
       details.appendChild(summary);
 
       const row = document.createElement("div");
@@ -669,7 +796,7 @@ class HAPanelNGAlarm extends HTMLElement {
         if ((!next.id || patch.name !== undefined) && next.name) next.id = this._slugify(next.name);
         arr[idx] = next;
         this._data.global_bypass_rules = arr;
-        summary.innerHTML = `<ha-icon icon="${next.icon || "mdi:swap-horizontal"}"></ha-icon> ${next.name || next.id || `Global bypass #${idx + 1}`}`;
+        summary.innerHTML = this._summaryWithHandle(next.icon || "mdi:swap-horizontal", next.name || next.id || `Global bypass #${idx + 1}`);
       };
 
       row.append(
@@ -1023,14 +1150,26 @@ class HAPanelNGAlarm extends HTMLElement {
     if (!host) return;
     host.innerHTML = "";
 
+    if (!(this._haUsers || []).length) {
+      const hint = document.createElement("div");
+      hint.className = "muted";
+      hint.style.marginBottom = "8px";
+      hint.textContent = this._t("HA user list unavailable in this context; mapping picker may stay empty.", "HA-Benutzerliste in diesem Kontext nicht verfügbar; der Mapping-Picker kann leer bleiben.");
+      host.appendChild(hint);
+    }
+
     (this._data.users || []).forEach((u, idx) => {
       const item = document.createElement("div");
       item.className = "item";
+      this._bindSimpleDnD(item, idx, host, "users", () => {
+        this._renderUsers();
+        this._renderActions();
+      });
       const details = document.createElement("details");
       details.open = !u.name;
       const summary = document.createElement("summary");
       const userIcon = "mdi:account";
-      summary.innerHTML = `<ha-icon icon="${userIcon}"></ha-icon> ${u.name || `User #${idx + 1}`}`;
+      summary.innerHTML = this._summaryWithHandle(userIcon, u.name || `User #${idx + 1}`);
       details.appendChild(summary);
 
       const row = document.createElement("div");
@@ -1041,17 +1180,50 @@ class HAPanelNGAlarm extends HTMLElement {
         this._data.users = users;
         const iu = users[idx];
         const userIconNow = "mdi:account";
-        summary.innerHTML = `<ha-icon icon="${userIconNow}"></ha-icon> ${iu.name || `User #${idx + 1}`}`;
+        summary.innerHTML = this._summaryWithHandle(userIconNow, iu.name || `User #${idx + 1}`);
       };
 
       const modeOptions = this._zoneModeOptions();
+      const haUserOptions = (this._haUsers || []).map((u) => ({ value: u.id, label: u.name }));
+      const helper = document.createElement("div");
+      helper.className = "muted";
+      helper.style.marginTop = "-2px";
+      helper.style.marginBottom = "6px";
+      helper.textContent = this._t(
+        "Map Home Assistant UI users to this alarm user for code-less arming and proper cause_user logging.",
+        "Ordnen Sie Home-Assistant-UI-Benutzer diesem Alarm-Benutzer zu (für codefreies Scharfschalten und korrektes cause_user-Logging)."
+      );
+
       row.append(
         this._sel({ text: {} }, u.name || "", (v) => upd({ name: v }), "Name"),
         this._sel({ text: { type: "password" } }, u.code || "", (v) => upd({ code: v }), "Code"),
-        this._sel({ boolean: {} }, !!u.can_arm, (v) => upd({ can_arm: !!v }), "Can arm"),
-        this._sel({ boolean: {} }, !!u.can_arm_override, (v) => upd({ can_arm_override: !!v }), this._t("Can arm with override", "Kann mit Override scharf schalten")),
+      );
+
+      const sep0 = document.createElement("hr");
+      sep0.className = "sep";
+      sep0.style.marginTop = "6px";
+      sep0.style.marginBottom = "2px";
+      row.append(sep0);
+
+      row.append(
+        this._sel(
+          { select: { multiple: true, mode: "dropdown", options: haUserOptions } },
+          Array.isArray(u.ha_user_ids) ? u.ha_user_ids : [],
+          (v) => upd({ ha_user_ids: Array.isArray(v) ? v : [] }),
+          this._t("Linked HA users", "Verknüpfte HA-Benutzer")
+        ),
+        helper,
+      );
+
+      const sep = document.createElement("hr");
+      sep.className = "sep";
+      sep.style.marginTop = "6px";
+      sep.style.marginBottom = "2px";
+      row.append(sep);
+
+      row.append(
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.arm_modes || [], (v) => upd({ arm_modes: v || [] }), "Arm modes"),
-        this._sel({ boolean: {} }, !!u.can_disarm, (v) => upd({ can_disarm: !!v }), "Can disarm"),
+        this._sel({ boolean: {} }, !!u.can_arm_override, (v) => upd({ can_arm_override: !!v }), this._t("Can arm with override", "Kann mit Override scharf schalten")),
         this._sel({ select: { multiple: true, mode: "dropdown", options: modeOptions } }, u.disarm_modes || [], (v) => upd({ disarm_modes: v || [] }), "Disarm modes"),
       );
 
@@ -1080,23 +1252,51 @@ class HAPanelNGAlarm extends HTMLElement {
     if (!host) return;
     host.innerHTML = "";
 
-    const stateOptions = [
-      { value: "any", label: "Any" },
-      { value: "disarmed", label: "Disarmed" },
-      { value: "arming", label: "Arming" },
-      { value: "armed_home", label: "Armed Home" },
-      { value: "armed_away", label: "Armed Away" },
-      { value: "pending", label: "Pending" },
-      { value: "triggered", label: "Triggered" },
-    ];
-    const throughZoneOptions = [{ value: "any", label: "Any" }, ...this._modeOptions()];
-    const throughModeOptions = [
-      { value: "any", label: "Any" },
-      { value: "away", label: "Away" },
-      { value: "home", label: "Home" },
-      { value: "night", label: "Night" },
-      { value: "vacation", label: "Vacation" },
-    ];
+    if (this._data.require_second_arm_for_override !== false) {
+      const systemItem = document.createElement("div");
+      systemItem.className = "item";
+      const sysDetails = document.createElement("details");
+      sysDetails.open = false;
+      const sysSummary = document.createElement("summary");
+      sysSummary.innerHTML = this._summaryWithHandle(
+        "mdi:bell-outline",
+        this._t("Default notice: force-arm confirmation", "Standardhinweis: Force-Arm-Bestätigung")
+      );
+      const sysHint = document.createElement("div");
+      sysHint.className = "muted";
+      sysHint.style.marginTop = "8px";
+      sysHint.textContent = this._t(
+        "Built-in notice shown when second arming is required. It cannot be deleted, only enabled/disabled.",
+        "Eingebauter Hinweis bei erforderlichem zweitem Scharfschalten. Er kann nicht gelöscht, nur aktiviert/deaktiviert werden."
+      );
+      const sysBtn = document.createElement("button");
+      sysBtn.className = "btn danger";
+      sysBtn.type = "button";
+      const syncSysBtn = () => {
+        const enabled = this._data.override_required_persistent_notice !== false;
+        sysBtn.textContent = enabled
+          ? this._t("Disable notice", "Hinweis deaktivieren")
+          : this._t("Enable notice", "Hinweis aktivieren");
+      };
+      syncSysBtn();
+      sysBtn.addEventListener("click", () => {
+        this._data.override_required_persistent_notice = !(this._data.override_required_persistent_notice !== false);
+        syncSysBtn();
+        this._scheduleAutosave();
+      });
+
+      const sysBox = document.createElement("div");
+      sysBox.className = "sensor-btn-row system-notice-wrap";
+      const sysTop = document.createElement("div");
+      sysTop.className = "sensor-btn-top";
+      sysTop.append(sysBtn);
+      sysBox.append(sysHint, sysTop);
+      sysDetails.append(sysSummary, sysBox);
+      systemItem.appendChild(sysDetails);
+      host.appendChild(systemItem);
+    }
+
+    const throughZoneOptions = [{ value: "any", label: this._t("Any zone", "Beliebige Zone") }, ...this._modeOptions()];
     const userOptions = [
       { value: "any_actor", label: this._t("Any User / Any Sensor", "Beliebiger Benutzer / Beliebiger Sensor") },
       { value: "any_user", label: this._t("Any User", "Beliebiger Benutzer") },
@@ -1110,31 +1310,78 @@ class HAPanelNGAlarm extends HTMLElement {
     (this._data.actions || []).forEach((action, idx) => {
       const item = document.createElement("div");
       item.className = "item";
+      this._bindSimpleDnD(item, idx, host, "actions", () => {
+        this._renderActions();
+      });
       const details = document.createElement("details");
       details.open = !action.name;
       const summary = document.createElement("summary");
-      summary.innerHTML = `<ha-icon icon="${action.icon || "mdi:script-text-outline"}"></ha-icon> ${action.name || `Action #${idx + 1}`}`;
+      summary.innerHTML = this._summaryWithHandle(action.icon || "mdi:script-text-outline", action.name || `Action #${idx + 1}`);
       details.appendChild(summary);
 
       const row = document.createElement("div");
       row.className = "row";
       const upd = (patch) => {
         const actions = [...(this._data.actions || [])];
-        actions[idx] = { ...actions[idx], ...patch };
+        actions[idx] = { ...actions[idx], ...patch, through_mode: ["any"] };
         this._data.actions = actions;
         const a = actions[idx];
-        summary.innerHTML = `<ha-icon icon="${a.icon || "mdi:script-text-outline"}"></ha-icon> ${a.name || `Action #${idx + 1}`}`;
+        summary.innerHTML = this._summaryWithHandle(a.icon || "mdi:script-text-outline", a.name || `Action #${idx + 1}`);
       };
 
+      const selectedZones = Array.isArray(action.through) && action.through.length ? action.through : ["any"];
+      const { options: stateOptions, reduced: stateReduced } = this._actionStateOptionsForZones(selectedZones);
+      const selectedFrom = (action.from || ["any"])[0] || "any";
+      const toOptions = this._actionToOptions(selectedFrom, stateOptions);
+
+      const nameSel = this._sel({ text: {} }, action.name || "", (v) => upd({ name: v }), "Action name");
+      const iconSel = this._sel({ icon: {} }, action.icon || "mdi:script-text-outline", (v) => upd({ icon: v }), "Icon");
+      nameSel.style.marginBottom = "-2px";
+      iconSel.style.marginTop = "-2px";
+
       row.append(
-        this._sel({ text: {} }, action.name || "", (v) => upd({ name: v }), "Action name"),
-        this._sel({ icon: {} }, action.icon || "mdi:script-text-outline", (v) => upd({ icon: v }), "Icon"),
-        this._sel({ select: { mode: "dropdown", options: stateOptions } }, (action.from || ["any"])[0] || "any", (v) => upd({ from: [v || "any"] }), "From state"),
-        this._sel({ select: { mode: "dropdown", options: stateOptions } }, (action.to || ["any"])[0] || "any", (v) => upd({ to: [v || "any"] }), "To state"),
-        this._sel({ select: { mode: "dropdown", options: throughZoneOptions } }, (action.through || ["any"])[0] || "any", (v) => upd({ through: [v || "any"] }), "Through zone"),
-        this._sel({ select: { mode: "dropdown", options: throughModeOptions } }, (action.through_mode || ["any"])[0] || "any", (v) => upd({ through_mode: [v || "any"] }), "Through mode"),
+        nameSel,
+        iconSel,
+        this._sel(
+          { select: { multiple: true, mode: "dropdown", options: throughZoneOptions } },
+          selectedZones,
+          (v) => {
+            const arr = Array.isArray(v) ? v : [v || "any"];
+            const cleaned = arr.filter(Boolean);
+            const noAny = cleaned.filter((x) => x !== "any");
+            const normalized = cleaned.includes("any") && noAny.length ? noAny : (cleaned.length ? cleaned : ["any"]);
+            upd({ through: normalized, from: ["any"], to: ["any"] });
+            this._renderActions();
+          },
+          this._t("Zones", "Zonen")
+        ),
+        this._sel(
+          { select: { mode: "dropdown", options: stateOptions } },
+          selectedFrom,
+          (v) => {
+            upd({ from: [v || "any"], to: ["any"] });
+            this._renderActions();
+          },
+          this._t("From state", "Von Zustand")
+        ),
+        this._sel({ select: { mode: "dropdown", options: toOptions } }, (action.to || ["any"])[0] || "any", (v) => upd({ to: [v || "any"] }), this._t("To state", "Zu Zustand")),
         this._sel({ select: { mode: "dropdown", options: userOptions } }, action.by_user || "any_actor", (v) => upd({ by_user: v || "any_actor" }), "By"),
       );
+
+      const topSep = document.createElement("hr");
+      topSep.className = "sep";
+      topSep.style.marginTop = "4px";
+      row.insertBefore(topSep, row.children[2] || null);
+
+      if (stateReduced) {
+        const warn = document.createElement("div");
+        warn.className = "muted";
+        warn.textContent = this._t(
+          "State options were reduced because selected zones support different arm states.",
+          "Die Zustandsauswahl wurde eingeschränkt, da gewählte Zonen unterschiedliche Scharfzustände unterstützen."
+        );
+        row.append(warn);
+      }
       const sep = document.createElement("hr");
       sep.className = "sep";
       row.appendChild(sep);
@@ -1152,6 +1399,35 @@ class HAPanelNGAlarm extends HTMLElement {
         this._data.actions = actions;
         this._renderActions();
         this._scheduleAutosave();
+      });
+
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "btn pill-gray";
+      copyBtn.type = "button";
+      copyBtn.textContent = this._t("Copy action", "Aktion kopieren");
+      copyBtn.addEventListener("click", () => {
+        const current = (this._data.actions || [])[idx] || {};
+        this._actionConfigClipboard = JSON.parse(JSON.stringify(current));
+        this._status(this._t("Action copied.", "Aktion kopiert."), "ok");
+        this._flashButtonText(copyBtn, this._t("Copied!", "Kopiert!"), 1200, this._t("Copy action", "Aktion kopieren"));
+      });
+
+      const pasteBtn = document.createElement("button");
+      pasteBtn.className = "btn pill-gray";
+      pasteBtn.type = "button";
+      pasteBtn.textContent = this._t("Paste action", "Aktion einfügen");
+      pasteBtn.addEventListener("click", () => {
+        if (!this._actionConfigClipboard) {
+          this._status(this._t("No copied action available.", "Keine kopierte Aktion verfügbar."), "error");
+          return;
+        }
+        const actions = [...(this._data.actions || [])];
+        const currentName = actions[idx]?.name || "";
+        actions[idx] = { ...JSON.parse(JSON.stringify(this._actionConfigClipboard)), name: currentName || actions[idx]?.name || "" };
+        this._data.actions = actions;
+        this._renderActions();
+        this._scheduleAutosave();
+        this._status(this._t("Action pasted.", "Aktion eingefügt."), "ok");
       });
 
       const test = document.createElement("button");
@@ -1173,7 +1449,7 @@ class HAPanelNGAlarm extends HTMLElement {
       btnRow.className = "sensor-btn-row";
       const btnTop = document.createElement("div");
       btnTop.className = "sensor-btn-top";
-      btnTop.append(test);
+      btnTop.append(copyBtn, pasteBtn, test);
       const btnDelete = document.createElement("div");
       btnDelete.className = "sensor-btn-delete";
       btnDelete.append(del);
@@ -1190,17 +1466,23 @@ class HAPanelNGAlarm extends HTMLElement {
     try {
       const targets = action.targets || action.scripts || [];
       if (!Array.isArray(targets) || !targets.length) return false;
+      const testZone = Array.isArray(action.through)
+        ? (action.through.find((z) => z && z !== "any") || action.through[0] || "main")
+        : "main";
       const variables = {
+        zone: Array.isArray(action.through) && action.through.length
+          ? action.through.filter((z) => z && z !== "any").join(", ") || "main"
+          : testZone,
         from_state: "disarmed",
         to_state: "triggered",
-        alarm_state: "triggered",
-        alarm_mode: (action.through || ["any"])[0] || "any",
-        zone: (action.through || ["main"])[0] || "main",
-        arm_type: (action.through_mode || ["away"])[0] || "away",
-        actor: "test_user",
-        by: "test_user",
-        triggered_sensor: "binary_sensor.test_sensor",
-        triggered_sensor_name: "Test Sensor",
+        arm_type: "away",
+        cause_user: "UI (test_user)",
+        cause_sensor: "binary_sensor.test_sensor",
+        cause_sensor_name: "Test Sensor",
+        pending_seconds: 30,
+        blocking_sensors: ["binary_sensor.test_window", "binary_sensor.test_door"],
+        blocking_sensor_names: ["Test Window", "Test Door"],
+        blocking_sensors_text: "Test Window, Test Door",
       };
       for (const entityId of targets) {
         const [domain] = String(entityId || "").split(".", 1);
@@ -1220,6 +1502,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
   async _loadConfig() {
     try {
+      await this._loadHaUsers();
       const data = await this._hass.callApi("get", "ng_alarm/config");
       this._data = {
         name: "NG Alarm",
@@ -1227,6 +1510,9 @@ class HAPanelNGAlarm extends HTMLElement {
         require_code_to_mode_change: true,
         require_code_to_disarm: true,
         code_input_mode: "pin",
+        arm_override_confirm_window: 20,
+        require_second_arm_for_override: true,
+        override_required_persistent_notice: true,
         expose_event_log_sensor: false,
         modes: [],
         global_bypass_rules: [],
@@ -1235,6 +1521,10 @@ class HAPanelNGAlarm extends HTMLElement {
         actions: [],
         ...data,
       };
+
+      if (Array.isArray(this._data.actions)) {
+        this._data.actions = this._data.actions.map((a) => ({ ...a, through_mode: ["any"] }));
+      }
 
       this._renderGeneral();
       this._renderModes();
@@ -1250,6 +1540,30 @@ class HAPanelNGAlarm extends HTMLElement {
     } catch (err) {
       this._configLoaded = false;
       this._status(`${this._t("Load failed", "Laden fehlgeschlagen")}: ${err.message}`, "error");
+    }
+  }
+
+  async _loadHaUsers() {
+    try {
+      let users = [];
+      try {
+        users = await this._hass.callWS({ type: "config/auth/list" });
+      } catch (_wsErr) {
+        users = await this._hass.callApi("get", "config/users");
+      }
+      this._haUsers = (Array.isArray(users) ? users : [])
+        .filter((u) => u && u.id && (u.name || u.username))
+        .map((u) => ({ id: String(u.id), name: String(u.name || u.username) }));
+
+      const currentId = this._hass?.user?.id;
+      const currentName = this._hass?.user?.name || this._hass?.user?.username;
+      if (currentId && currentName && !this._haUsers.some((u) => u.id === currentId)) {
+        this._haUsers.unshift({ id: String(currentId), name: String(currentName) });
+      }
+    } catch (_err) {
+      const currentId = this._hass?.user?.id;
+      const currentName = this._hass?.user?.name || this._hass?.user?.username;
+      this._haUsers = currentId && currentName ? [{ id: String(currentId), name: String(currentName) }] : [];
     }
   }
 
@@ -1328,7 +1642,9 @@ class HAPanelNGAlarm extends HTMLElement {
         item.className = "item";
         const ts = fmt.format(new Date((ev.ts || 0) * 1000));
         const z = this._zoneDisplayLabel(ev.zone || "main");
-        item.innerHTML = `<strong>[${z}] ${ev.event || "event"}</strong> • ${ts}<br/>${ev.message || ""}<br/><span class="muted">from=${ev.from_state || ""} to=${ev.to_state || ""} by=${ev.by || ev.actor || ""}</span>`;
+        const causeUser = ev.cause_user || ev.by || ev.actor || "N/A";
+        const causeSensor = ev.cause_sensor || "N/A";
+        item.innerHTML = `<strong>[${z}] ${ev.event || "event"}</strong> • ${ts}<br/>${ev.message || ""}<br/><span class="muted">from=${ev.from_state || "N/A"} to=${ev.to_state || "N/A"} cause_user=${causeUser} cause_sensor=${causeSensor} pending_seconds=${ev.pending_seconds ?? 0}</span>`;
         host.appendChild(item);
       });
     } catch (err) {
@@ -1403,6 +1719,84 @@ class HAPanelNGAlarm extends HTMLElement {
     s.classList.remove("status-ok", "status-error");
     if (level === "ok") s.classList.add("status-ok");
     if (level === "error") s.classList.add("status-error");
+  }
+
+  _summaryWithHandle(icon, text) {
+    return `
+      <span class="summary-with-handle">
+        <span class="summary-main">
+          <ha-icon icon="${icon}"></ha-icon>
+          <span class="summary-main-text">${text}</span>
+        </span>
+        <span class="summary-handle"><ha-icon icon="mdi:menu"></ha-icon></span>
+      </span>
+    `;
+  }
+
+  _bindSimpleDnD(item, idx, host, key, rerender) {
+    item.draggable = true;
+    item.dataset.index = String(idx);
+    item.addEventListener("dragstart", (ev) => {
+      ev.dataTransfer.effectAllowed = "move";
+      ev.dataTransfer.setData("text/plain", String(idx));
+      this._dragIndicators[key] = null;
+      item.classList.add("dragging");
+    });
+    item.addEventListener("dragend", () => {
+      item.classList.remove("dragging");
+      host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
+      this._dragIndicators[key] = null;
+    });
+    item.addEventListener("dragover", (ev) => {
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = "move";
+      const rect = item.getBoundingClientRect();
+      const upper = rect.top + rect.height * 0.35;
+      const lower = rect.top + rect.height * 0.65;
+      let before = true;
+      if (ev.clientY <= upper) before = true;
+      else if (ev.clientY >= lower) before = false;
+      else if (this._dragIndicators[key] && this._dragIndicators[key].idx === idx) before = this._dragIndicators[key].before;
+      else before = ev.clientY < rect.top + rect.height / 2;
+
+      const changed = !this._dragIndicators[key]
+        || this._dragIndicators[key].idx !== idx
+        || this._dragIndicators[key].before !== before;
+      if (!changed) return;
+
+      this._dragIndicators[key] = { idx, before };
+      host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
+      item.classList.add(before ? "drag-over-before" : "drag-over-after");
+    });
+    item.addEventListener("dragleave", () => {
+      // keep marker stable until next dragover/drop
+    });
+    item.addEventListener("drop", (ev) => {
+      ev.preventDefault();
+      const from = Number(ev.dataTransfer.getData("text/plain"));
+      const to = Number(item.dataset.index);
+      if (Number.isNaN(from) || Number.isNaN(to)) return;
+      const before = this._dragIndicators[key] && this._dragIndicators[key].idx === to
+        ? this._dragIndicators[key].before
+        : ev.clientY < (item.getBoundingClientRect().top + item.getBoundingClientRect().height / 2);
+      const arr = [...(this._data[key] || [])];
+      const [moved] = arr.splice(from, 1);
+      let insertAt = to + (before ? 0 : 1);
+      if (from < insertAt) insertAt -= 1;
+      if (insertAt < 0) insertAt = 0;
+      if (insertAt > arr.length) insertAt = arr.length;
+      if (insertAt === from) {
+        host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
+        this._dragIndicators[key] = null;
+        return;
+      }
+      arr.splice(insertAt, 0, moved);
+      this._data[key] = arr;
+      host.querySelectorAll(".item").forEach((n) => n.classList.remove("drag-over-before", "drag-over-after"));
+      this._dragIndicators[key] = null;
+      rerender();
+      this._scheduleAutosave();
+    });
   }
 }
 

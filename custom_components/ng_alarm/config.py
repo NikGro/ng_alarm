@@ -14,7 +14,9 @@ from .const import (
     CONF_ACTION_BY_USER,
     CONF_ACTION_FROM,
     CONF_ACTION_ICON,
+    CONF_ARM_OVERRIDE_CONFIRM_WINDOW,
     CONF_CODE_INPUT_MODE,
+    CONF_OVERRIDE_REQUIRED_PERSISTENT_NOTICE,
     CONF_ACTION_SCRIPTS,
     CONF_ACTION_TARGETS,
     CONF_ACTION_THROUGH,
@@ -34,6 +36,7 @@ from .const import (
     CONF_REQUIRE_CODE_TO_ARM,
     CONF_REQUIRE_CODE_TO_DISARM,
     CONF_REQUIRE_CODE_TO_MODE_CHANGE,
+    CONF_REQUIRE_SECOND_ARM_FOR_OVERRIDE,
     CONF_SENSOR_BYPASS_GLOBAL_IDS,
     CONF_SENSOR_RULES,
     CONF_SENSOR_TRIGGER_ON_OPEN_ONLY,
@@ -42,6 +45,7 @@ from .const import (
     CONF_USER_CAN_ARM,
     CONF_USER_CAN_ARM_OVERRIDE,
     CONF_USER_CAN_DISARM,
+    CONF_USER_HA_USER_IDS,
     CONF_USER_ARM_MODES,
     CONF_USER_DISARM_MODES,
     CONF_USER_CODE,
@@ -94,6 +98,15 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     )
     data[CONF_REQUIRE_CODE_TO_DISARM] = bool(
         data.get(CONF_REQUIRE_CODE_TO_DISARM, True)
+    )
+    data[CONF_ARM_OVERRIDE_CONFIRM_WINDOW] = max(
+        5, int(data.get(CONF_ARM_OVERRIDE_CONFIRM_WINDOW, 20) or 20)
+    )
+    data[CONF_REQUIRE_SECOND_ARM_FOR_OVERRIDE] = bool(
+        data.get(CONF_REQUIRE_SECOND_ARM_FOR_OVERRIDE, True)
+    )
+    data[CONF_OVERRIDE_REQUIRED_PERSISTENT_NOTICE] = bool(
+        data.get(CONF_OVERRIDE_REQUIRED_PERSISTENT_NOTICE, True)
     )
     mode = str(data.get(CONF_CODE_INPUT_MODE, "pin") or "pin").strip().lower()
     data[CONF_CODE_INPUT_MODE] = mode if mode in {"pin", "password"} else "pin"
@@ -299,6 +312,10 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
             for v in user.get(CONF_USER_DISARM_MODES, [])
             if str(v).strip()
         ]
+        raw_ha_user_ids = user.get(CONF_USER_HA_USER_IDS, [])
+        if isinstance(raw_ha_user_ids, str):
+            raw_ha_user_ids = [v.strip() for v in raw_ha_user_ids.split(",") if v.strip()]
+        ha_user_ids = [str(v).strip() for v in (raw_ha_user_ids or []) if str(v).strip()]
         users.append(
             {
                 CONF_USER_NAME: name or f"User {len(users) + 1}",
@@ -306,6 +323,7 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
                 CONF_USER_CAN_ARM: bool(user.get(CONF_USER_CAN_ARM, True)),
                 CONF_USER_CAN_ARM_OVERRIDE: bool(user.get(CONF_USER_CAN_ARM_OVERRIDE, False)),
                 CONF_USER_CAN_DISARM: bool(user.get(CONF_USER_CAN_DISARM, True)),
+                CONF_USER_HA_USER_IDS: ha_user_ids,
                 CONF_USER_ARM_MODES: arm_modes,
                 CONF_USER_DISARM_MODES: disarm_modes,
             }

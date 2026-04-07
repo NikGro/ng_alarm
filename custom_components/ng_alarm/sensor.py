@@ -67,7 +67,7 @@ class NGAlarmEventLogSensor(SensorEntity):
         zone = str(last.get("zone") or self._zone)
         from_state = str(last.get("from_state") or "unknown")
         to_state = str(last.get("to_state") or str(last.get("state") or "unknown"))
-        by_actor = str(last.get("by") or last.get("actor") or "unknown")
+        by_actor = str(last.get("cause_user") or last.get("by") or last.get("actor") or "N/A")
         txt = f"[{zone}] {from_state} -> {to_state} by {by_actor}"
         return txt[:255]
 
@@ -78,14 +78,16 @@ class NGAlarmEventLogSensor(SensorEntity):
         zone = str(last.get("zone") or self._zone)
         from_state = str(last.get("from_state") or "unknown")
         to_state = str(last.get("to_state") or str(last.get("state") or "unknown"))
-        by_actor = str(last.get("by") or last.get("actor") or "unknown")
+        by_actor = str(last.get("cause_user") or last.get("by") or last.get("actor") or "N/A")
         return {
             "zone": zone,
             "event_count": len(events),
             "last_event": last.get("event"),
-            "last_actor": last.get("actor"),
-            "last_state": last.get("state"),
-            "last_mode": last.get("mode"),
+            "message": last.get("message", ""),
+            "cause_user": by_actor,
+            "cause_sensor": last.get("cause_sensor", "N/A"),
+            "cause_sensor_name": last.get("cause_sensor_name", "N/A"),
+            "pending_seconds": int(last.get("pending_seconds") or 0),
             "last_zone": zone,
             "last_ts": last.get("ts"),
             "enabled": bool(self._runtime.config.get(CONF_EXPOSE_EVENT_LOG_SENSOR, False)),

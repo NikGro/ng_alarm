@@ -25,6 +25,9 @@ CONF_NAME = "name"
 CONF_REQUIRE_CODE_TO_ARM = "require_code_to_arm"
 CONF_REQUIRE_CODE_TO_MODE_CHANGE = "require_code_to_mode_change"
 CONF_REQUIRE_CODE_TO_DISARM = "require_code_to_disarm"
+CONF_ARM_OVERRIDE_CONFIRM_WINDOW = "arm_override_confirm_window"
+CONF_REQUIRE_SECOND_ARM_FOR_OVERRIDE = "require_second_arm_for_override"
+CONF_OVERRIDE_REQUIRED_PERSISTENT_NOTICE = "override_required_persistent_notice"
 CONF_CODE_INPUT_MODE = "code_input_mode"
 CONF_MODES = "modes"
 CONF_SENSOR_RULES = "sensor_rules"
@@ -63,6 +66,7 @@ CONF_USER_CODE = "code"
 CONF_USER_CAN_ARM = "can_arm"
 CONF_USER_CAN_DISARM = "can_disarm"
 CONF_USER_CAN_ARM_OVERRIDE = "can_arm_override"
+CONF_USER_HA_USER_IDS = "ha_user_ids"
 CONF_USER_ARM_MODES = "arm_modes"
 CONF_USER_DISARM_MODES = "disarm_modes"
 
@@ -91,6 +95,9 @@ DEFAULTS: dict = {
     CONF_REQUIRE_CODE_TO_ARM: True,
     CONF_REQUIRE_CODE_TO_MODE_CHANGE: True,
     CONF_REQUIRE_CODE_TO_DISARM: True,
+    CONF_ARM_OVERRIDE_CONFIRM_WINDOW: 20,
+    CONF_REQUIRE_SECOND_ARM_FOR_OVERRIDE: True,
+    CONF_OVERRIDE_REQUIRED_PERSISTENT_NOTICE: True,
     CONF_CODE_INPUT_MODE: "pin",
     CONF_MODES: [],
     CONF_SENSOR_RULES: [],
@@ -143,4 +150,5 @@ INT_KEYS = {
     CONF_ENTRY_DELAY_AWAY,
     CONF_EXIT_DELAY_HOME,
     CONF_ENTRY_DELAY_HOME,
+    CONF_ARM_OVERRIDE_CONFIRM_WINDOW,
 }
