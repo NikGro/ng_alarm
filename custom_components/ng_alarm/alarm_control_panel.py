@@ -629,6 +629,24 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             return True
         return "any" in normalized or current in normalized
 
+    def _mode_scope_matches(self, scopes: list[str], *, empty_means_all: bool) -> bool:
+        """Match zone or zone:arm_type scope values against current mode context."""
+        normalized = [str(v).strip().lower() for v in (scopes or []) if str(v).strip()]
+        if not normalized:
+            return empty_means_all
+
+        current_mode = _normalize_mode_id(self._current_mode_id)
+        current_arm = str(self._current_arm_type or "").strip().lower()
+
+        for scope in normalized:
+            if ":" in scope:
+                zone_id, arm_type = scope.split(":", 1)
+                if _normalize_mode_id(zone_id) == current_mode and str(arm_type).strip().lower() == current_arm:
+                    return True
+            elif _normalize_mode_id(scope) == current_mode:
+                return True
+        return False
+
     async def _async_run_transition_actions(
         self,
         from_state: str,
@@ -837,17 +855,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 entity_id = str(rule.get("entity_id", "")).strip()
                 if not entity_id:
                     continue
-                modes_raw = [str(v).strip().lower() for v in rule.get("modes", []) if str(v).strip()]
-                current_pair = f"{self._current_mode_id}:{self._current_arm_type}"
-                if modes_raw:
-                    mode_ids = {_normalize_mode_id(v.split(":", 1)[0]) for v in modes_raw}
-                    if self._current_mode_id not in mode_ids and current_pair not in set(modes_raw):
-                        continue
-                bypass_raw = [str(v).strip().lower() for v in rule.get("bypass_modes", []) if str(v).strip()]
-                if bypass_active and bypass_raw:
-                    bypass_ids = {_normalize_mode_id(v.split(":", 1)[0]) for v in bypass_raw}
-                    if self._current_mode_id in bypass_ids or current_pair in set(bypass_raw):
-                        continue
+                if not self._mode_scope_matches(rule.get("modes", []), empty_means_all=True):
+                    continue
+                if bypass_active and self._mode_scope_matches(rule.get("bypass_modes", []), empty_means_all=False):
+                    continue
 
                 global_bypass_ids = {
                     _normalize_mode_id(v)
@@ -1102,8 +1113,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             entity_id = str(rule.get("entity_id", "")).strip()
             if not entity_id:
                 continue
-            modes = [_normalize_mode_id(v) for v in rule.get("modes", [])]
-            if modes and self._current_mode_id not in modes:
+            if not self._mode_scope_matches(rule.get("modes", []), empty_means_all=True):
                 continue
             if bool(rule.get("allow_open_arm", False)):
                 continue
