@@ -344,6 +344,9 @@ class HAPanelNGAlarm extends HTMLElement {
       modes.push({ id: "", name: "", icon: "mdi:shield", arm_target: "away", arm_types: ["away"], require_code_to_arm: true, require_code_to_mode_change: true, require_code_to_disarm: true, exit_delay: 60, entry_delay: 30, bypass_mode: "none", bypass_entities: [], bypass_template: "" });
       this._data.modes = modes;
       this._renderModes();
+      this._renderSensors();
+      this._renderUsers();
+      this._renderActions();
       this._scheduleAutosave();
     });
 
@@ -403,6 +406,7 @@ class HAPanelNGAlarm extends HTMLElement {
       users.push({ name: "", code: "", can_arm_override: false, ha_user_ids: [], arm_modes: [], disarm_modes: [] });
       this._data.users = users;
       this._renderUsers();
+      this._renderActions();
       this._scheduleAutosave();
     });
 
@@ -675,6 +679,10 @@ class HAPanelNGAlarm extends HTMLElement {
         modes[idx] = next;
         this._data.modes = modes;
         summary.innerHTML = this._summaryWithHandle(next.icon || "mdi:shield", next.name || next.id || `Zone #${idx + 1}`);
+        // Keep dependent pickers (sensor/user/action selectors) live without page refresh.
+        this._renderSensors();
+        this._renderUsers();
+        this._renderActions();
       };
 
       const selectedArmTypes = Array.isArray(mode.arm_types) && mode.arm_types.length
@@ -797,6 +805,8 @@ class HAPanelNGAlarm extends HTMLElement {
         arr[idx] = next;
         this._data.global_bypass_rules = arr;
         summary.innerHTML = this._summaryWithHandle(next.icon || "mdi:swap-horizontal", next.name || next.id || `Global bypass #${idx + 1}`);
+        // Sensor pickers use global bypass options.
+        this._renderSensors();
       };
 
       row.append(
@@ -1181,6 +1191,8 @@ class HAPanelNGAlarm extends HTMLElement {
         const iu = users[idx];
         const userIconNow = "mdi:account";
         summary.innerHTML = this._summaryWithHandle(userIconNow, iu.name || `User #${idx + 1}`);
+        // Action "By" picker should update immediately.
+        this._renderActions();
       };
 
       const modeOptions = this._zoneModeOptions();
