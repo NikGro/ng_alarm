@@ -1179,7 +1179,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                     await self._async_override_required_notice(blocking)
                     return
             else:
-                self._clear_override_confirmation()
+                # Prepare one-step force-arm confirmation flow:
+                # first blocked arm attempt primes confirmation window,
+                # next explicit override (notification/button) can arm directly.
+                if self._require_second_override_arm():
+                    self._set_override_confirmation(self._current_mode_id, self._current_arm_type, blocking)
+                else:
+                    self._clear_override_confirmation()
                 await self._async_log_event(
                     "arm_blocked",
                     "Arming blocked due to open sensors",
