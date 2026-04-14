@@ -222,6 +222,9 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             == str(self._override_confirm_arm_type or UNKNOWN).strip().lower()
         )
 
+    def _has_active_override_confirmation(self) -> bool:
+        return int(time.time()) <= int(self._override_confirm_until or 0)
+
     def _require_second_override_arm(self) -> bool:
         return bool(self._config.get(CONF_REQUIRE_SECOND_ARM_FOR_OVERRIDE, True))
 
@@ -1148,7 +1151,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                         sensors=blocking,
                     )
                     self._clear_override_confirmation()
-                elif self._is_override_confirmation_valid(self._current_mode_id, self._current_arm_type):
+                elif self._is_override_confirmation_valid(self._current_mode_id, self._current_arm_type) or self._has_active_override_confirmation():
                     await self._async_log_event(
                         "arm_override_confirmed",
                         "Arming override confirmed",
