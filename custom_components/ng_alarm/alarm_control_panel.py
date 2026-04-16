@@ -931,6 +931,22 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         entity_id = event.data.get("entity_id", UNKNOWN)
         rule = self._sensor_rule(entity_id)
 
+        # Re-evaluate bypass at trigger time to avoid stale listener windows
+        # (e.g. template/global bypass turns active after arming).
+        if rule:
+            bypass_active = self._is_bypass_active()
+            if bypass_active and self._mode_scope_matches(rule.get("bypass_modes", []), empty_means_all=False):
+                return
+
+            active_global_bypass = self._active_global_bypass_ids()
+            global_bypass_ids = {
+                _normalize_mode_id(v)
+                for v in rule.get(CONF_SENSOR_BYPASS_GLOBAL_IDS, [])
+                if str(v).strip()
+            }
+            if global_bypass_ids and (global_bypass_ids & active_global_bypass):
+                return
+
         new_state_value = str(new_state.state).lower()
         ignore_unknown = self._config.get(CONF_IGNORE_UNKNOWN_STATES, True)
         ignore_unavailable = self._config.get(CONF_IGNORE_UNAVAILABLE_STATES, True)
