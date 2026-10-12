@@ -302,3 +302,27 @@ Issues end up on a task list that feeds back into the next development session. 
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
+
+
+## Compatibility and validation
+
+Version 1.0.2 fixes HTTP API access on Home Assistant 2026.10, restricts all
+configuration-panel endpoints to administrators, and restores night/vacation
+states and active timers after restart or integration reload. Timer deadlines
+are persisted; old saved runtimes without deadlines resume their saved delay.
+PIN mode accepts only ASCII digits 0–9 and preserves leading zeros. Password
+mode compares the full password exactly, including spaces and punctuation.
+Switching to PIN mode requires all configured user codes to be numeric first;
+invalid configurations are rejected without overwriting the saved configuration.
+Zone-wide permissions and individual arm-type permissions are checked separately.
+The mobile header follows Home Assistant's header dimensions and theme colors,
+respects Companion App/browser safe-area insets (including the iPhone status bar
+and Dynamic Island), and uses HA's native menu button when it is registered.
+A themed, accessible button remains available while native components load.
+
+Regression tests run against Home Assistant 2026.10.1:
+
+```sh
+python -m pip install -r requirements-test.txt
+python -m pytest
+```

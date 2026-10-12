@@ -44,7 +44,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         await async_setup_panel(hass)
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # Sensors depend on alarm entities created by the alarm platform setup.
+    for platform in PLATFORMS:
+        await hass.config_entries.async_forward_entry_setups(entry, [platform])
     return True
 
 
