@@ -326,3 +326,15 @@ Regression tests run against Home Assistant 2026.10.1:
 python -m pip install -r requirements-test.txt
 python -m pytest
 ```
+
+
+### Version 2.1.0 — Native tab navigation
+
+The panel now places General, Zones, Sensors, Users, Actions and Events in one
+horizontal tab strip directly below the header, matching Home Assistant's Tools
+view. The strip scrolls on small screens and keeps the selected tab visible.
+HA's native tab components are used when loaded; a keyboard-accessible, styled
+fallback works immediately while the frontend loads them. The header and tab
+strip stay together while scrolling, with the existing safe-area spacing. Add buttons for sortable lists, including
+bulk sensor additions, use rounded accent styling and a plus icon, matching
+Home Assistant's automation editor.

@@ -93,14 +93,20 @@ class HAPanelNGAlarm extends HTMLElement {
         }
         .wrap { padding: 0 12px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); max-width: none; margin: 0; color: var(--primary-text-color); }
         .content { max-width: 980px; margin: 0 auto; }
+        .panel-header {
+          position: sticky;
+          top: 0;
+          z-index: 4;
+          margin: 0 -12px 12px;
+          color: var(--app-header-text-color);
+          background: var(--app-header-background-color);
+          border-bottom: 1px solid var(--divider-color);
+        }
         .head-native {
           display:flex;
           align-items:center;
           min-height: calc(var(--header-height, 56px) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
-          position: sticky;
-          top: 0;
-          z-index: 4;
-          margin: 0 -12px 10px;
+          margin: 0;
           padding: var(--safe-area-inset-top, env(safe-area-inset-top, 0px))
             calc(12px + var(--safe-area-inset-right, env(safe-area-inset-right, 0px))) 0
             calc(12px + var(--safe-area-inset-left, env(safe-area-inset-left, 0px)));
@@ -111,7 +117,6 @@ class HAPanelNGAlarm extends HTMLElement {
           overflow: hidden;
           box-sizing: border-box;
           background: var(--app-header-background-color, var(--card-background-color));
-          border-bottom: 1px solid var(--divider-color);
         }
         .menu-btn {
           width: 48px;
@@ -146,22 +151,51 @@ class HAPanelNGAlarm extends HTMLElement {
         .head-version { font-size: 0.85rem; color: inherit; opacity: 0.75; padding-right: 2px; }
         .muted { color: var(--secondary-text-color); font-size: 0.9rem; }
 
-        .tabs { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin: 12px 0; }
-        .tab {
-          border:1px solid var(--divider-color);
-          background: var(--card-background-color);
-          color: var(--primary-text-color);
-          border-radius: 999px;
-          padding: 6px 10px;
-          cursor:pointer;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          min-height: 38px;
-          font-size: 0.95rem;
-          flex: 0 0 auto;
+        .tab-strip {
+          min-width: 0;
+          padding-inline: var(--safe-area-inset-left, env(safe-area-inset-left, 0px))
+            var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
         }
-        .tab.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
+        .tabs {
+          display: flex;
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          overflow-y: hidden;
+          scrollbar-width: none;
+          overscroll-behavior-x: contain;
+          -webkit-overflow-scrolling: touch;
+          min-width: 0;
+        }
+        .tabs::-webkit-scrollbar { display: none; }
+        button.tab {
+          appearance: none;
+          flex: 0 0 auto;
+          min-height: 48px;
+          margin: 0;
+          padding: 1em 1.5em;
+          border: 0;
+          border-bottom: 2px solid transparent;
+          border-radius: 0;
+          background: transparent;
+          color: inherit;
+          opacity: 0.8;
+          font-family: inherit;
+          font-size: var(--ha-font-size-m, 14px);
+          font-weight: var(--ha-font-weight-normal, 400);
+          line-height: var(--ha-line-height-normal, 20px);
+          white-space: nowrap;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+        }
+        button.tab.active { opacity: 1; border-bottom-color: currentColor; }
+        button.tab:hover { opacity: 1; }
+        button.tab:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
+        ha-tab-group {
+          display: block;
+          --ha-tab-active-text-color: var(--app-header-text-color);
+          --ha-tab-indicator-color: var(--app-header-text-color);
+          --ha-tab-track-color: transparent;
+        }
 
         .section { display:none; }
         .section.active { display:block; }
@@ -190,6 +224,27 @@ class HAPanelNGAlarm extends HTMLElement {
           cursor:pointer;
           transition: filter 120ms ease, transform 80ms ease, box-shadow 120ms ease;
         }
+        button.add-list {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          min-height: 40px;
+          max-width: 100%;
+          padding: 8px 16px;
+          border: 0;
+          border-radius: var(--ha-border-radius-pill, 999px);
+          background: var(--primary-color, #03a9f4);
+          color: var(--text-primary-color, #fff);
+          font-family: inherit;
+          font-size: var(--ha-font-size-m, 14px);
+          font-weight: var(--ha-font-weight-medium, 500);
+          line-height: 20px;
+          text-align: center;
+        }
+        .add-list svg { width: 20px; height: 20px; flex: 0 0 20px; fill: currentColor; }
+        button.add-list:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 3px; }
+        ha-button.add-list { --ha-button-border-radius: var(--ha-border-radius-pill, 999px); }
         .btn.primary { border:none; background: var(--primary-color); color:white; font-weight:600; border-radius: 999px; }
         .btn.pill-gray { border:none; background: #474c52; color: #fff; border-radius: 999px; }
         .btn-save { min-height: 44px; padding: 10px 18px; font-size: 1rem; white-space: nowrap; min-width: 170px; }
@@ -254,17 +309,15 @@ class HAPanelNGAlarm extends HTMLElement {
         }
 
         @media (max-width: 800px) {
-          .wrap { max-width: 100%; padding: 0 10px 10px; }
+          .wrap { max-width: 100%; padding-inline: 10px; }
           .content { max-width: 100%; }
-          .head-native { margin: 0 -10px 10px; }
-
-          .tabs { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; justify-content: stretch; }
-          .tab { flex: 1 1 auto; }
+          .panel-header { margin-inline: -10px; }
           .btn-save { min-width: 156px; }
         }
       </style>
 
       <div class="wrap">
+        <header class="panel-header">
         <div class="head-native">
           <button id="open-sidebar" class="menu-btn" type="button" title="${this._t("Open sidebar", "Seitenleiste öffnen")}" aria-label="${this._t("Open sidebar", "Seitenleiste öffnen")}">
             <ha-icon icon="mdi:menu"></ha-icon>
@@ -274,69 +327,72 @@ class HAPanelNGAlarm extends HTMLElement {
           <div class="head-version" id="header-version">v–</div>
         </div>
 
+        <nav class="tab-strip" aria-label="${this._t("Alarm settings", "Alarm-Einstellungen")}">
+          <div class="tabs" id="alarm-tabs" role="tablist">
+            <button class="tab" id="tab-general" data-tab="general" role="tab" aria-controls="general" aria-selected="false" tabindex="-1">${this._t("General", "Allgemein")}</button>
+            <button class="tab" id="tab-modes" data-tab="modes" role="tab" aria-controls="modes" aria-selected="false" tabindex="-1">${this._t("Zones", "Zonen")}</button>
+            <button class="tab" id="tab-sensors" data-tab="sensors" role="tab" aria-controls="sensors" aria-selected="false" tabindex="-1">${this._t("Sensors", "Sensoren")}</button>
+            <button class="tab" id="tab-users" data-tab="users" role="tab" aria-controls="users" aria-selected="false" tabindex="-1">${this._t("Users", "Benutzer")}</button>
+            <button class="tab" id="tab-actions" data-tab="actions" role="tab" aria-controls="actions" aria-selected="false" tabindex="-1">${this._t("Actions", "Aktionen")}</button>
+            <button class="tab" id="tab-events" data-tab="events" role="tab" aria-controls="events" aria-selected="false" tabindex="-1">${this._t("Events", "Ereignisse")}</button>
+          </div>
+        </nav>
+        </header>
+
         <div class="content">
 
-        <div class="tabs">
-          <button class="tab" data-tab="general"><ha-icon icon="mdi:cog-outline"></ha-icon>${this._t("General", "Allgemein")}</button>
-          <button class="tab" data-tab="modes"><ha-icon icon="mdi:shape-outline"></ha-icon>${this._t("Zones", "Zonen")}</button>
-          <button class="tab" data-tab="sensors"><ha-icon icon="mdi:motion-sensor"></ha-icon>${this._t("Sensors", "Sensoren")}</button>
-          <button class="tab" data-tab="users"><ha-icon icon="mdi:account-outline"></ha-icon>${this._t("Users", "Benutzer")}</button>
-          <button class="tab" data-tab="actions"><ha-icon icon="mdi:script-text-outline"></ha-icon>${this._t("Actions", "Aktionen")}</button>
-          <button class="tab" data-tab="events"><ha-icon icon="mdi:history"></ha-icon>${this._t("Events", "Ereignisse")}</button>
-        </div>
-
-        <div id="general" class="section">
+        <div id="general" class="section" role="tabpanel" aria-labelledby="tab-general">
           <ha-card header="${this._t("General Settings", "Allgemeine Einstellungen")}">
             <div class="muted" style="margin-bottom:8px">${this._t("Choose how users enter their code in the alarm panel.", "Wählen Sie, wie Benutzer ihren Code im Alarm-Panel eingeben.")}</div>
             <div id="general-settings-list" class="list"></div>
           </ha-card>
         </div>
 
-        <div id="modes" class="section">
+        <div id="modes" class="section" role="tabpanel" aria-labelledby="tab-modes">
           <ha-card header="${this._t("Zones", "Zonen")}">
             <div class="muted card-subtitle" id="zones-help">Each zone can expose one or more native arm types and has its own delays/bypass settings.</div>
             <div id="modes-list" class="list" style="margin-top:10px"></div>
-            <button id="modes-add" class="btn" type="button">${this._t("+ Add zone", "+ Zone hinzufügen")}</button>
+            <button id="modes-add" class="btn add-list" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"></path></svg>${this._t("Add zone", "Zone hinzufügen")}</button>
           </ha-card>
         </div>
 
-        <div id="sensors" class="section">
+        <div id="sensors" class="section" role="tabpanel" aria-labelledby="tab-sensors">
           <ha-card header="${this._t("Global Bypass Rules", "Globale Bypass-Regeln")}">
             <div class="muted card-subtitle">${this._t("Global bypass elements can be reused by multiple sensors.", "Globale Bypass-Elemente können von mehreren Sensoren verwendet werden.")}</div>
             <div id="global-bypass-list" class="list" style="margin-top:10px"></div>
-            <button id="global-bypass-add" class="btn" type="button">${this._t("+ Add global bypass", "+ Globalen Bypass hinzufügen")}</button>
+            <button id="global-bypass-add" class="btn add-list" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"></path></svg>${this._t("Add global bypass", "Globalen Bypass hinzufügen")}</button>
           </ha-card>
           <ha-card header="${this._t("Sensors", "Sensoren")}">
             <div class="muted card-subtitle">${this._t("Per sensor zones, bypass and trigger flags", "Pro Sensor: Zonen, Bypass und Trigger-Flags")}</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-              <button id="sensors-add-all-motion" class="btn" type="button">${this._t("+ Add all motion / occupancy", "+ Alle Bewegungs-/Präsenzsensoren hinzufügen")}</button>
-              <button id="sensors-add-all-door" class="btn" type="button">${this._t("+ Add all door / window", "+ Alle Tür-/Fenstersensoren hinzufügen")}</button>
+              <button id="sensors-add-all-motion" class="btn add-list" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"></path></svg>${this._t("Add all motion / occupancy", "Alle Bewegungs-/Präsenzsensoren hinzufügen")}</button>
+              <button id="sensors-add-all-door" class="btn add-list" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"></path></svg>${this._t("Add all door / window", "Alle Tür-/Fenstersensoren hinzufügen")}</button>
             </div>
             <div id="sensors-list" class="list" style="margin-top:10px"></div>
-            <button id="sensors-add" class="btn" type="button">${this._t("+ Add sensor", "+ Sensor hinzufügen")}</button>
+            <button id="sensors-add" class="btn add-list" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"></path></svg>${this._t("Add sensor", "Sensor hinzufügen")}</button>
           </ha-card>
         </div>
 
-        <div id="users" class="section">
+        <div id="users" class="section" role="tabpanel" aria-labelledby="tab-users">
           <ha-card header="${this._t("Users & Codes", "Benutzer & Codes")}">
             <div class="muted" style="margin-bottom:8px">${this._t("Manage users, permissions and which zones each code may control.", "Verwalten Sie Benutzer, Berechtigungen und welche Zonen jeder Code steuern darf.")}</div>
             <div id="users-list" class="list"></div>
-            <button id="users-add" class="btn" type="button">${this._t("+ Add user", "+ Benutzer hinzufügen")}</button>
+            <button id="users-add" class="btn add-list" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"></path></svg>${this._t("Add user", "Benutzer hinzufügen")}</button>
           </ha-card>
         </div>
 
-        <div id="actions" class="section">
+        <div id="actions" class="section" role="tabpanel" aria-labelledby="tab-actions">
           <ha-card header="${this._t("Action Builder", "Aktions-Builder")}">
             <div class="muted" style="margin-bottom:8px">${this._t("Define what should run when the alarm changes state.", "Definieren Sie, was beim Zustandswechsel des Alarms ausgeführt wird.")}</div>
             <div id="actions-list" class="list"></div>
-            <button id="actions-add" class="btn" type="button">${this._t("+ Add action", "+ Aktion hinzufügen")}</button>
+            <button id="actions-add" class="btn add-list" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"></path></svg>${this._t("Add action", "Aktion hinzufügen")}</button>
             <div class="muted card-subtitle" style="margin-top:10px">
               ${this._t("Variables available", "Verfügbare Variablen")}: <code>zone</code>, <code>from_state</code>, <code>to_state</code>, <code>arm_type</code>, <code>cause_user</code>, <code>cause_sensor</code>, <code>cause_sensor_name</code>, <code>pending_seconds</code>.
             </div>
           </ha-card>
         </div>
 
-        <div id="events" class="section">
+        <div id="events" class="section" role="tabpanel" aria-labelledby="tab-events">
           <ha-card header="${this._t("Event Log", "Ereignisprotokoll")}">
             <div class="muted" style="margin-bottom:8px">${this._t("Review alarm history across all zones and export or clear entries.", "Prüfen Sie den Alarmverlauf über alle Zonen und exportieren oder löschen Sie Einträge.")}</div>
             <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
@@ -378,9 +434,8 @@ class HAPanelNGAlarm extends HTMLElement {
       this._updateNavigation();
     });
     this._updateNavigation();
-    this.shadowRoot.querySelectorAll(".tab").forEach((btn) => {
-      btn.addEventListener("click", () => this._switchTab(btn.dataset.tab));
-    });
+    this._bindTabs();
+    this._upgradeAddButtons();
 
     this.shadowRoot.getElementById("modes-add").addEventListener("click", () => {
       const modes = [...(this._data.modes || [])];
@@ -470,11 +525,105 @@ class HAPanelNGAlarm extends HTMLElement {
     this.shadowRoot.getElementById("events-clear").addEventListener("click", () => this._clearEvents());
   }
 
-  _switchTab(tab) {
-    this._activeTab = tab;
-    this.shadowRoot.querySelectorAll(".tab").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.tab === tab);
+  _upgradeAddButtons() {
+    // Use the same rounded accent button as HA's automation editor when loaded.
+    customElements.whenDefined("ha-button").then(() => {
+      for (const button of this.shadowRoot.querySelectorAll("button.add-list")) {
+        const nativeButton = document.createElement("ha-button");
+        nativeButton.id = button.id;
+        nativeButton.className = "add-list";
+        nativeButton.setAttribute("appearance", "accent");
+        nativeButton.setAttribute("variant", "brand");
+        nativeButton.setAttribute("size", "m");
+        const icon = button.querySelector("svg").cloneNode(true);
+        icon.setAttribute("slot", "start");
+        nativeButton.append(icon, document.createTextNode(button.textContent));
+        // Existing handlers are bound to the original button. Forward once,
+        // preserving the same add/autosave behavior without rebinding them.
+        nativeButton.addEventListener("click", () => button.click());
+        button.replaceWith(nativeButton);
+      }
     });
+  }
+
+  _bindTabs() {
+    const tabs = this.shadowRoot.getElementById("alarm-tabs");
+    tabs.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-tab]");
+      if (button) this._switchTab(button.dataset.tab);
+    });
+    tabs.addEventListener("keydown", (event) => {
+      if (event.altKey || event.metaKey || event.ctrlKey) return;
+      const buttons = [...tabs.querySelectorAll("button[data-tab]")];
+      const index = buttons.indexOf(event.target);
+      if (index < 0) return;
+      const rtl = getComputedStyle(this).direction === "rtl";
+      let next;
+      if (event.key === "ArrowRight") next = (index + (rtl ? -1 : 1) + buttons.length) % buttons.length;
+      if (event.key === "ArrowLeft") next = (index + (rtl ? 1 : -1) + buttons.length) % buttons.length;
+      if (event.key === "Home") next = 0;
+      if (event.key === "End") next = buttons.length - 1;
+      if (next === undefined) return;
+      event.preventDefault();
+      this._switchTab(buttons[next].dataset.tab);
+      buttons[next].focus({ preventScroll: true });
+    });
+
+    // HA loads frontend components lazily. The scrollable fallback stays
+    // functional until the same native components used by Tools are registered.
+    Promise.all([
+      customElements.whenDefined("ha-tab-group"),
+      customElements.whenDefined("ha-tab-group-tab"),
+    ]).then(() => {
+      if (this.shadowRoot.getElementById("alarm-tabs") !== tabs) return;
+      const group = document.createElement("ha-tab-group");
+      group.id = "alarm-tabs";
+      group.tabOnly = true;
+      for (const button of tabs.querySelectorAll("button[data-tab]")) {
+        const tab = document.createElement("ha-tab-group-tab");
+        tab.slot = "nav";
+        tab.id = button.id;
+        tab.className = "tab";
+        tab.panel = button.dataset.tab;
+        tab.setAttribute("panel", button.dataset.tab);
+        tab.setAttribute("aria-controls", button.dataset.tab);
+        tab.dataset.tab = button.dataset.tab;
+        tab.textContent = button.textContent;
+        tab.active = button.dataset.tab === this._activeTab;
+        group.appendChild(tab);
+      }
+      group.addEventListener("wa-tab-show", (event) => {
+        const name = event.detail?.name;
+        if (name && name !== this._activeTab) this._switchTab(name);
+      });
+      tabs.replaceWith(group);
+    });
+  }
+
+  _switchTab(tab) {
+    const section = this.shadowRoot.getElementById(tab);
+    if (!section?.classList.contains("section")) return;
+    this._activeTab = tab;
+    this.shadowRoot.querySelectorAll(".tab").forEach((button) => {
+      const active = button.dataset.tab === tab;
+      button.classList.toggle("active", active);
+      if (button.tagName === "BUTTON") {
+        button.setAttribute("aria-selected", String(active));
+        button.tabIndex = active ? 0 : -1;
+        if (active) {
+          // Scroll only the tab strip, never the panel/page vertically.
+          const strip = button.parentElement;
+          const buttonRect = button.getBoundingClientRect();
+          const stripRect = strip.getBoundingClientRect();
+          if (buttonRect.left < stripRect.left) strip.scrollLeft += buttonRect.left - stripRect.left;
+          else if (buttonRect.right > stripRect.right) strip.scrollLeft += buttonRect.right - stripRect.right;
+        }
+      } else {
+        button.active = active;
+      }
+    });
+    const group = this.shadowRoot.getElementById("alarm-tabs");
+    if (group?.tagName === "HA-TAB-GROUP") group.active = tab;
     this.shadowRoot.querySelectorAll(".section").forEach((sec) => {
       sec.classList.toggle("active", sec.id === tab);
     });
@@ -1869,5 +2018,5 @@ if (!customElements.get("ha-panel-ng-alarm")) {
   customElements.define("ha-panel-ng-alarm", HAPanelNGAlarm);
 }
 if (!customElements.get("ng-alarm-panel")) {
-  customElements.define("ng-alarm-panel", HAPanelNGAlarm);
+  customElements.define("ng-alarm-panel", class extends HAPanelNGAlarm {});
 }
