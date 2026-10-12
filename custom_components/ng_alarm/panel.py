@@ -13,6 +13,8 @@ from homeassistant.components.frontend import (
     async_register_built_in_panel,
 )
 from homeassistant.components.http import HomeAssistantView
+from homeassistant.components.http.const import KEY_HASS_USER
+from homeassistant.helpers.http import KEY_HASS
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
@@ -33,7 +35,20 @@ from .config import normalize_config, save_config
 _LOGGER = logging.getLogger(__name__)
 
 
-class NGAlarmConfigView(HomeAssistantView):
+class NGAlarmAdminView(HomeAssistantView):
+    """Require backend admin authorization for the configuration panel APIs."""
+
+    requires_auth = True
+
+    @staticmethod
+    def admin_hass(request):
+        user = request.get(KEY_HASS_USER)
+        if user is None or not user.is_admin:
+            raise web.HTTPForbidden()
+        return request.app[KEY_HASS]
+
+
+class NGAlarmConfigView(NGAlarmAdminView):
     """Read/write NG Alarm configuration."""
 
     url = API_GET_CONFIG
@@ -42,17 +57,20 @@ class NGAlarmConfigView(HomeAssistantView):
 
     async def get(self, request):
         """Return current config."""
-        hass = request.app["hass"]
+        hass = self.admin_hass(request)
         runtime = hass.data[DOMAIN][RUNTIME_STATE_KEY]
         return self.json(runtime.config)
 
     async def post(self, request):
         """Persist config and reload runtime."""
-        hass = request.app["hass"]
+        hass = self.admin_hass(request)
         runtime = hass.data[DOMAIN][RUNTIME_STATE_KEY]
 
         payload = await request.json()
-        normalized = await save_config(runtime.store, payload)
+        try:
+            normalized = await save_config(runtime.store, payload)
+        except (ValueError, TypeError) as err:
+            raise web.HTTPBadRequest(text=str(err)) from err
         runtime.config = normalized
 
         # Remove orphaned zone entities from entity registry when zones were deleted.
@@ -100,7 +118,7 @@ class NGAlarmConfigView(HomeAssistantView):
         return self.json({"ok": True, "config": normalized})
 
 
-class NGAlarmReloadView(HomeAssistantView):
+class NGAlarmReloadView(NGAlarmAdminView):
     """Reload runtime from persisted storage."""
 
     url = API_RELOAD
@@ -109,7 +127,7 @@ class NGAlarmReloadView(HomeAssistantView):
 
     async def post(self, request):
         """Reload alarm runtime and entity listeners."""
-        hass = request.app["hass"]
+        hass = self.admin_hass(request)
         runtime = hass.data[DOMAIN][RUNTIME_STATE_KEY]
         runtime.config = normalize_config(await runtime.store.async_load())
 
@@ -120,7 +138,7 @@ class NGAlarmReloadView(HomeAssistantView):
         return self.json({"ok": True, "config": runtime.config})
 
 
-class NGAlarmEventsView(HomeAssistantView):
+class NGAlarmEventsView(NGAlarmAdminView):
     """Expose event log for panel display."""
 
     url = API_EVENTS
@@ -128,7 +146,7 @@ class NGAlarmEventsView(HomeAssistantView):
     requires_auth = True
 
     async def get(self, request):
-        hass = request.app["hass"]
+        hass = self.admin_hass(request)
         runtime = hass.data[DOMAIN][RUNTIME_STATE_KEY]
         entities = runtime.entities or ([runtime.entity] if runtime.entity else [])
 
@@ -158,7 +176,7 @@ class NGAlarmEventsView(HomeAssistantView):
         return self.json({"events": events[-500:], "events_by_zone": by_zone, "zones": sorted(set(zones))})
 
 
-class NGAlarmEventsClearView(HomeAssistantView):
+class NGAlarmEventsClearView(NGAlarmAdminView):
     """Clear event log from panel."""
 
     url = API_EVENTS_CLEAR
@@ -166,7 +184,7 @@ class NGAlarmEventsClearView(HomeAssistantView):
     requires_auth = True
 
     async def post(self, request):
-        hass = request.app["hass"]
+        hass = self.admin_hass(request)
         runtime = hass.data[DOMAIN][RUNTIME_STATE_KEY]
         payload = await request.json() if request.can_read_body else {}
         wanted_zone = str(payload.get("zone", "all") or "all").strip().lower()

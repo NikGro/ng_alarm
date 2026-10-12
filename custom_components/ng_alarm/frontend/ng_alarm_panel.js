@@ -4,6 +4,7 @@ class HAPanelNGAlarm extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._initialized = false;
     this._hass = null;
+    this._narrow = false;
     this._data = {};
     this._events = [];
     this._eventZones = [];
@@ -53,6 +54,7 @@ class HAPanelNGAlarm extends HTMLElement {
     });
     const mb = this.shadowRoot.getElementById("open-sidebar");
     if (mb) mb.hass = hass;
+    this._updateNavigation();
     this._updateHeaderVersion();
     const ge = this.shadowRoot.getElementById("general-empty");
     if (ge) ge.textContent = this._t("(intentionally empty)", "(bewusst leer)");
@@ -60,7 +62,19 @@ class HAPanelNGAlarm extends HTMLElement {
     if (zh) zh.textContent = this._t("Each zone can expose one or more native arm types and has its own delays/bypass settings.", "Jede Zone kann einen oder mehrere native Arming-Typen anbieten und hat eigene Delay-/Bypass-Einstellungen.");
   }
 
-  set narrow(_narrow) {}
+  set narrow(narrow) {
+    this._narrow = Boolean(narrow);
+    this.toggleAttribute("narrow", this._narrow);
+    this._updateNavigation();
+  }
+
+  _updateNavigation() {
+    const menu = this.shadowRoot.getElementById("open-sidebar");
+    if (!menu) return;
+    menu.hass = this._hass;
+    menu.narrow = this._narrow;
+    menu.hidden = !(this._narrow || this._hass?.dockedSidebar === "always_hidden");
+  }
   set route(_route) {}
   set panel(_panel) {}
 
@@ -72,15 +86,26 @@ class HAPanelNGAlarm extends HTMLElement {
           height:100%;
           box-sizing:border-box;
           background: var(--primary-background-color);
+          overflow: auto;
+          color: var(--primary-text-color);
+          --app-header-background-color: var(--sidebar-background-color, var(--card-background-color));
+          --app-header-text-color: var(--sidebar-text-color, var(--primary-text-color));
         }
-        .wrap { padding: 0 12px 12px; max-width: none; margin: 0; color: var(--primary-text-color); }
+        .wrap { padding: 0 12px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); max-width: none; margin: 0; color: var(--primary-text-color); }
         .content { max-width: 980px; margin: 0 auto; }
         .head-native {
           display:flex;
           align-items:center;
-          min-height: 56px;
+          min-height: calc(var(--header-height, 56px) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
+          position: sticky;
+          top: 0;
+          z-index: 4;
           margin: 0 -12px 10px;
-          padding: 0 12px;
+          padding: var(--safe-area-inset-top, env(safe-area-inset-top, 0px))
+            calc(12px + var(--safe-area-inset-right, env(safe-area-inset-right, 0px))) 0
+            calc(12px + var(--safe-area-inset-left, env(safe-area-inset-left, 0px)));
+          color: var(--app-header-text-color);
+          --mdc-icon-button-ink-color: var(--app-header-text-color);
           width: auto;
           max-width: none;
           overflow: hidden;
@@ -89,28 +114,36 @@ class HAPanelNGAlarm extends HTMLElement {
           border-bottom: 1px solid var(--divider-color);
         }
         .menu-btn {
-          width: 40px;
-          height: 40px;
+          width: 48px;
+          height: 48px;
+          flex: 0 0 48px;
+          color: inherit;
+          -webkit-tap-highlight-color: transparent;
           padding: 0;
           border-radius: 999px;
           border: none !important;
           background: transparent !important;
           box-shadow: none !important;
-          display: none;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
         }
         .head-title {
           margin-left: 0;
-          font-size: 1rem;
-          font-weight: 600;
+          font-size: var(--ha-font-size-xl, 20px);
+          font-weight: var(--ha-font-weight-normal, 400);
           line-height: 1;
           min-height: 40px;
           display: inline-flex;
           align-items: center;
         }
+        .menu-btn[hidden], ha-menu-button[hidden] { display: none; }
+        .menu-btn ha-icon { color: inherit; }
+        .menu-btn:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
+        ha-menu-button { color: var(--app-header-text-color); }
+        :host([narrow]) .head-title { margin-inline-start: 8px; }
         .head-spacer { flex: 1; }
-        .head-version { font-size: 0.85rem; color: var(--secondary-text-color); padding-right: 2px; }
+        .head-version { font-size: 0.85rem; color: inherit; opacity: 0.75; padding-right: 2px; }
         .muted { color: var(--secondary-text-color); font-size: 0.9rem; }
 
         .tabs { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin: 12px 0; }
@@ -224,8 +257,7 @@ class HAPanelNGAlarm extends HTMLElement {
           .wrap { max-width: 100%; padding: 0 10px 10px; }
           .content { max-width: 100%; }
           .head-native { margin: 0 -10px 10px; }
-          .menu-btn { display: inline-flex; }
-          .head-title { margin-left: 8px; }
+
           .tabs { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; justify-content: stretch; }
           .tab { flex: 1 1 auto; }
           .btn-save { min-width: 156px; }
@@ -234,7 +266,7 @@ class HAPanelNGAlarm extends HTMLElement {
 
       <div class="wrap">
         <div class="head-native">
-          <button id="open-sidebar" class="menu-btn" type="button" title="Open sidebar" aria-label="Open sidebar">
+          <button id="open-sidebar" class="menu-btn" type="button" title="${this._t("Open sidebar", "Seitenleiste öffnen")}" aria-label="${this._t("Open sidebar", "Seitenleiste öffnen")}">
             <ha-icon icon="mdi:menu"></ha-icon>
           </button>
           <div class="head-title">${this._t("Alarm", "Alarm")}</div>
@@ -332,9 +364,20 @@ class HAPanelNGAlarm extends HTMLElement {
 
   _bindEvents() {
     this.shadowRoot.getElementById("save").addEventListener("click", () => this._saveConfig());
-    this.shadowRoot.getElementById("open-sidebar").addEventListener("click", () => {
+    const menu = this.shadowRoot.getElementById("open-sidebar");
+    menu.addEventListener("click", () => {
       this.dispatchEvent(new Event("hass-toggle-menu", { bubbles: true, composed: true }));
     });
+    // Use HA's native menu (including notification indicator) when available.
+    // The plain button remains a functional fallback while HA loads components.
+    customElements.whenDefined("ha-menu-button").then(() => {
+      if (!menu.isConnected) return;
+      const nativeMenu = document.createElement("ha-menu-button");
+      nativeMenu.id = "open-sidebar";
+      menu.replaceWith(nativeMenu);
+      this._updateNavigation();
+    });
+    this._updateNavigation();
     this.shadowRoot.querySelectorAll(".tab").forEach((btn) => {
       btn.addEventListener("click", () => this._switchTab(btn.dataset.tab));
     });
@@ -600,7 +643,10 @@ class HAPanelNGAlarm extends HTMLElement {
           },
         },
         this._data.code_input_mode || "pin",
-        (v) => upd({ code_input_mode: v || "pin" }),
+        (v) => {
+          upd({ code_input_mode: v || "pin" });
+          this._renderUsers();
+        },
         this._t("Code input mode", "Code-Eingabemodus")
       ),
       this._sel(
@@ -1692,6 +1738,13 @@ class HAPanelNGAlarm extends HTMLElement {
       delete payload.alarm_code;
       delete payload.panic_code;
 
+      if ((payload.code_input_mode || "pin") === "pin" &&
+          (payload.users || []).some((u) => u.code && !/^[0-9]+$/.test(String(u.code)))) {
+        throw new Error(this._t(
+          "PIN codes must contain only digits (0-9). Change the codes or choose password mode.",
+          "PIN-Codes dürfen nur Ziffern (0-9) enthalten. Codes ändern oder den Passwortmodus wählen."
+        ));
+      }
       await this._hass.callApi("post", "ng_alarm/config", payload);
       this._status(
         isAutosave

@@ -298,10 +298,12 @@ def normalize_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     for user in data.get(CONF_USERS, []) or []:
         if not isinstance(user, dict):
             continue
-        code = str(user.get(CONF_USER_CODE) or "").strip()
+        code = str(user.get(CONF_USER_CODE) or "")
         name = str(user.get(CONF_USER_NAME) or "").strip()
         if not code:
             continue
+        if data[CONF_CODE_INPUT_MODE] == "pin" and not (code.isascii() and code.isdecimal()):
+            raise ValueError("PIN codes must contain only ASCII digits (0-9)")
         arm_modes = [
             str(v).strip().lower().replace(" ", "_")
             for v in user.get(CONF_USER_ARM_MODES, [])

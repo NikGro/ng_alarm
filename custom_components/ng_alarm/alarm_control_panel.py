@@ -14,6 +14,7 @@ from homeassistant.components.alarm_control_panel import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.components import persistent_notification
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 from homeassistant.helpers.storage import Store
@@ -97,17 +98,15 @@ def _normalize_mode_id(value: str | None) -> str:
     return str(value or "").strip().lower().replace(" ", "_")
 
 
-def _clean_code(value) -> str:
-    """Normalize buggy keypad input into a usable code string."""
-    code = str(value or "")
-    # Known HA frontend glitch can prepend text like "undefined".
-    code = code.replace("undefined", "")
-    code = code.strip()
-    # If mixed text slips through, keep only digits for PIN matching.
-    if any(ch.isdigit() for ch in code):
-        digits = "".join(ch for ch in code if ch.isdigit())
-        if digits:
-            code = digits
+def _clean_code(value, mode: str = "pin") -> str:
+    """Validate PINs without extracting digits; preserve passwords exactly."""
+    if value is None:
+        return ""
+    code = str(value)
+    if mode == "password":
+        return code
+    if code and not (code.isascii() and code.isdecimal()):
+        raise ServiceValidationError("PIN codes must contain only ASCII digits (0-9)")
     return code
 
 
@@ -182,6 +181,9 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
         self._exit_unsub = None
         self._entry_unsub = None
+        self._exit_deadline = None
+        self._entry_deadline = None
+        self._alarm_deadline = None
         self._alarm_duration_unsub = None
         self._sensor_unsub = None
         self._bypass_unsub = None
@@ -190,6 +192,9 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         self._override_confirm_mode_id = UNKNOWN
         self._override_confirm_arm_type = UNKNOWN
         self._override_confirm_sensors: list[str] = []
+
+    def _clean_code(self, value) -> str:
+        return _clean_code(value, self._config.get(CONF_CODE_INPUT_MODE, "pin"))
 
     def _apply_code_format(self) -> None:
         mode = str(self._config.get(CONF_CODE_INPUT_MODE, "pin") or "pin").strip().lower()
@@ -305,6 +310,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 "arming": AlarmControlPanelState.ARMING,
                 "armed_away": AlarmControlPanelState.ARMED_AWAY,
                 "armed_home": AlarmControlPanelState.ARMED_HOME,
+                "armed_night": STATE_ARMED_NIGHT,
+                "armed_vacation": STATE_ARMED_VACATION,
                 "pending": AlarmControlPanelState.PENDING,
                 "triggered": AlarmControlPanelState.TRIGGERED,
             }.get(raw, AlarmControlPanelState.DISARMED)
@@ -329,7 +336,22 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._override_confirm_sensors = [str(v) for v in (saved.get("override_confirm_sensors") or []) if str(v).strip()]
             self._event_log = list(saved.get("event_log", []))[-200:]
 
+        if saved:
+            self._exit_deadline = saved.get("exit_deadline")
+            self._entry_deadline = saved.get("entry_deadline")
+            self._alarm_deadline = saved.get("alarm_deadline")
         await self._async_bind_bypass_listener()
+        # Older saved runtimes have no deadline. Resume their saved delay once.
+        if self._alarm_state == AlarmControlPanelState.ARMING:
+            delay = self._remaining_delay(self._exit_deadline, self._exit_delay_seconds)
+            self._exit_deadline = time.time() + delay
+            self._exit_unsub = async_call_later(self.hass, delay, self._async_finish_exit_delay)
+        elif self._alarm_state == AlarmControlPanelState.PENDING:
+            delay = self._remaining_delay(self._entry_deadline, self._entry_delay_seconds or self._pending_seconds)
+            self._entry_deadline = time.time() + delay
+            self._entry_unsub = async_call_later(self.hass, delay, self._async_finish_entry_delay)
+        elif self._alarm_state == AlarmControlPanelState.TRIGGERED:
+            await self._schedule_alarm_timeout(resume=True)
         if self._alarm_state in (
             AlarmControlPanelState.ARMED_AWAY,
             AlarmControlPanelState.ARMED_HOME,
@@ -339,6 +361,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._async_refresh_sensor_listener()
 
     async def async_will_remove_from_hass(self) -> None:
+        await self._async_persist_runtime()
         self._cancel_timers()
         self._remove_listeners()
 
@@ -360,6 +383,9 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
     async def _async_persist_runtime(self) -> None:
         await self._store.async_save(
             {
+                "exit_deadline": self._exit_deadline,
+                "entry_deadline": self._entry_deadline,
+                "alarm_deadline": self._alarm_deadline,
                 "state": _state_str(self._alarm_state),
                 "armed_mode": _state_str(self._armed_mode) if self._armed_mode else None,
                 "triggered_sensor": self._triggered_sensor,
@@ -462,7 +488,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         # UI rule: no arm mode selection means no arm permission.
         if not allowed_raw:
             return False
-        allowed_zone = {_normalize_mode_id(v.split(":", 1)[0]) for v in allowed_raw}
+        allowed_zone = {_normalize_mode_id(v) for v in allowed_raw if ":" not in v}
         allowed_pairs = set(allowed_raw)
         current_pair = f"{mode_id}:{self._current_arm_type}"
         return mode_id in allowed_zone or current_pair in allowed_pairs
@@ -472,8 +498,11 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         # UI rule: no disarm mode selection means no disarm permission.
         if not allowed_raw:
             return False
-        allowed_zone = {_normalize_mode_id(v.split(":", 1)[0]) for v in allowed_raw}
-        return _normalize_mode_id(mode_id) in allowed_zone
+        allowed_zone = {_normalize_mode_id(v) for v in allowed_raw if ":" not in v}
+        return (
+            _normalize_mode_id(mode_id) in allowed_zone
+            or f"{_normalize_mode_id(mode_id)}:{self._current_arm_type}" in allowed_raw
+        )
 
     def _with_users(self) -> bool:
         return bool(self._config.get(CONF_USERS))
@@ -573,7 +602,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             )
 
         mode_id = _normalize_mode_id(mode_id)
-        cleaned_code = _clean_code(code)
+        cleaned_code = self._clean_code(code)
 
         if not require_code:
             # Optional: map HA UI user to alarm user for permission checks.
@@ -740,7 +769,16 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 blocking=False,
             )
 
+    @staticmethod
+    def _remaining_delay(deadline, fallback: int) -> float:
+        if deadline is None:
+            return max(0, fallback)
+        return max(0, float(deadline) - time.time())
+
     def _cancel_timers(self) -> None:
+        self._exit_deadline = None
+        self._entry_deadline = None
+        self._alarm_deadline = None
         if self._exit_unsub:
             self._exit_unsub()
             self._exit_unsub = None
@@ -987,6 +1025,8 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 )
             ),
         )
+        self._cancel_timers()
+        self._entry_deadline = time.time() + delay
         self._entry_delay_seconds = delay
         self._pending_seconds = delay
         self._alarm_state = AlarmControlPanelState.PENDING
@@ -1000,11 +1040,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         )
         await self._async_run_transition_actions(prev, "pending", "pending", pending_seconds=delay)
         await self._async_run_scripts(CONF_PENDING_SCRIPTS, "pending", pending_seconds=delay)
-        self._cancel_timers()
         self._entry_unsub = async_call_later(self.hass, delay, self._async_finish_entry_delay)
 
     async def _async_finish_entry_delay(self, _now):
         self._entry_unsub = None
+        self._entry_deadline = None
+        if self._alarm_state != AlarmControlPanelState.PENDING:
+            return
         pending_seconds = int(self._entry_delay_seconds or self._pending_seconds or 0)
         prev = _state_str(self._alarm_state)
         self._alarm_state = AlarmControlPanelState.TRIGGERED
@@ -1022,10 +1064,13 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         await self._async_run_scripts(CONF_TRIGGERED_SCRIPTS, "triggered", pending_seconds=pending_seconds)
         self._entry_delay_seconds = 0
         self._pending_seconds = 0
-        self._schedule_alarm_timeout()
+        await self._schedule_alarm_timeout()
 
     async def _async_finish_exit_delay(self, _now):
         self._exit_unsub = None
+        self._exit_deadline = None
+        if self._alarm_state != AlarmControlPanelState.ARMING:
+            return
         delay_seconds = int(self._exit_delay_seconds or 0)
         prev = _state_str(self._alarm_state)
         self._alarm_state = self._armed_mode or AlarmControlPanelState.ARMED_AWAY
@@ -1053,10 +1098,10 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             await self._async_run_scripts(CONF_ARMED_HOME_SCRIPTS, "armed_home")
 
     def _code_ok(self, given, expected: str) -> bool:
-        return _clean_code(given) == str(expected or "")
+        return self._clean_code(given) == str(expected or "")
 
     async def async_alarm_arm_away(self, code=None) -> None:
-        code = _clean_code(code)
+        code = self._clean_code(code)
         self._current_arm_type = "away"
         self._current_mode_id = self._resolve_mode_for_arm("away")
         actor = self._authorize_arm(code, self._current_mode_id)
@@ -1075,7 +1120,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         )
 
     async def async_alarm_arm_home(self, code=None) -> None:
-        code = _clean_code(code)
+        code = self._clean_code(code)
         self._current_arm_type = "home"
         self._current_mode_id = self._resolve_mode_for_arm("home")
         actor = self._authorize_arm(code, self._current_mode_id)
@@ -1094,7 +1139,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         )
 
     async def async_alarm_arm_night(self, code=None) -> None:
-        code = _clean_code(code)
+        code = self._clean_code(code)
         self._current_arm_type = "night"
         self._current_mode_id = self._resolve_mode_for_arm("night")
         actor = self._authorize_arm(code, self._current_mode_id)
@@ -1113,7 +1158,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         )
 
     async def async_alarm_arm_vacation(self, code=None) -> None:
-        code = _clean_code(code)
+        code = self._clean_code(code)
         self._current_arm_type = "vacation"
         self._current_mode_id = self._resolve_mode_for_arm("vacation")
         actor = self._authorize_arm(code, self._current_mode_id)
@@ -1224,6 +1269,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
         self._clear_override_confirmation()
 
+        self._exit_deadline = time.time() + delay if delay > 0 else None
         self._alarm_state = AlarmControlPanelState.ARMING if delay > 0 else mode
         self.async_write_ha_state()
         await self._async_persist_runtime()
@@ -1249,7 +1295,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 await self._async_run_scripts(CONF_ARMED_HOME_SCRIPTS, "armed_home")
 
     async def async_alarm_disarm(self, code=None) -> None:
-        code = _clean_code(code)
+        code = self._clean_code(code)
         actor = UNKNOWN
         mode_cfg = self._mode_config(self._current_mode_id) or {}
         require_code = bool(
@@ -1307,10 +1353,14 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
         await self._async_run_transition_actions(prev, "disarmed", "disarmed")
         await self._async_run_scripts(CONF_DISARMED_SCRIPTS, "disarmed")
 
-    def _schedule_alarm_timeout(self) -> None:
+    async def _schedule_alarm_timeout(self, *, resume: bool = False) -> None:
         duration = self._mode_delay(CONF_MODE_ALARM_DURATION, 0)
-        if duration <= 0:
+        if resume:
+            duration = self._remaining_delay(self._alarm_deadline, duration)
+        if duration <= 0 and not (resume and self._alarm_deadline is not None):
             return
+        self._alarm_deadline = time.time() + duration
+        await self._async_persist_runtime()
         if self._alarm_duration_unsub:
             self._alarm_duration_unsub()
             self._alarm_duration_unsub = None
@@ -1318,6 +1368,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
 
     async def _async_alarm_timeout(self, _now):
         self._alarm_duration_unsub = None
+        self._alarm_deadline = None
         if self._alarm_state != AlarmControlPanelState.TRIGGERED:
             return
         action = self._mode_timeout_action()
@@ -1353,7 +1404,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
                 await self._async_run_transition_actions(prev, to_state, to_state)
 
     async def async_alarm_trigger(self, code=None) -> None:
-        code = _clean_code(code)
+        code = self._clean_code(code)
         actor = UNKNOWN
         if self._with_users():
             user = self._resolve_user_from_code(code)
@@ -1373,6 +1424,7 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             AlarmControlPanelState.PENDING,
         ):
             self._last_actor = actor
+            self._cancel_timers()
             prev = _state_str(self._alarm_state)
             self._alarm_state = AlarmControlPanelState.TRIGGERED
             self.async_write_ha_state()
@@ -1399,4 +1451,4 @@ class NGAlarmControlPanel(AlarmControlPanelEntity):
             self._pending_seconds = 0
             self._exit_delay_seconds = 0
             self._entry_delay_seconds = 0
-            self._schedule_alarm_timeout()
+            await self._schedule_alarm_timeout()
